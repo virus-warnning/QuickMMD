@@ -1,0 +1,24 @@
+{
+	"name": "QuickMMD",
+	"version": "1.0.0",
+	"author": "[https://github.com/virus-warnning Raymond Wu]",
+	"url": "https://www.mediawiki.org/wiki/Extension:QuickMMD",
+	"descriptionmsg": "quick-mmd-desc",
+	"license-name": "MIT",
+	"type": "parserhook",
+	"requires": {
+		"MediaWiki": ">= 1.39.0"
+	},
+	"MessagesDirs": {
+		"QuickMMD": ["i18n"]
+	},
+	"AutoloadClasses": {
+		"QuickMMD": "QuickMMD.body.php"
+	},
+	"Hooks": {
+		"ParserFirstCallInit": [
+			"QuickMMD::init"
+		]	
+	},
+	"manifest_version": 2
+}

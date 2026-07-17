@@ -1,0 +1,14 @@
+{
+    "quick-mmd-desc" : "用美人魚語法製作圖表",
+    "filepath"     : "檔案路徑",
+    "filesize"     : "檔案大小",
+    "filemtime"    : "檔案更新時間",
+    "md5sum"       : "MD5 摘要",
+    "exectime"     : "轉圖時間",
+    "quickmmd-sec"  : "秒",
+    "mermaid-cli-path": "mermaid-cli 路徑",
+    "mermaid-cli-ver" : "mermaid-cli 版本",
+    "mermaid-syntax-ref" : "美人魚 (Mermaid) 語法參考",
+    "quickmmd-ver"  : "QuickMMD 版本",
+    "quickmmd-about": "關於 QuickMMD"
+}

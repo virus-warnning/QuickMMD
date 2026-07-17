@@ -1,0 +1,14 @@
+{
+    "quick-mmd-desc" : "Create chart by mermaid syntax.",
+    "filepath"     : "File Path",
+    "filesize"     : "File Size",
+    "filemtime"    : "Last modified",
+    "md5sum"       : "MD5 Summary",
+    "exectime"     : "Execution Time",
+    "quickmmd-sec"  : "second(s)",
+    "mermaid-cli-path": "mermaid-cli Path",
+    "mermaid-cli-ver" : "mermaid-cli Version",
+    "mermaid-syntax-ref" : "Mermaid syntax Reference",
+    "quickmmd-ver"  : "QuickMMD Version",
+    "quickmmd-about": "About QuickMMD"
+}
