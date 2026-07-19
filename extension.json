@@ -12,12 +12,12 @@
 	"MessagesDirs": {
 		"QuickMMD": ["i18n"]
 	},
-	"AutoloadClasses": {
-		"QuickMMD": "QuickMMD.body.php"
+	"AutoloadNamespaces": {
+		"MediaWiki\\Extension\\QuickMMD\\": "src/"
 	},
 	"Hooks": {
 		"ParserFirstCallInit": [
-			"QuickMMD::init"
+			"MediaWiki\\Extension\\QuickMMD\\Hook::init"
 		]	
 	},
 	"manifest_version": 2
