@@ -108,4 +108,30 @@ class FileSystemUtils {
         return $safename;
     }
 
+    /**
+     * 載入 SVG 轉檔摘要資訊, 以及容錯處理
+     */
+    public static function loadSummary($file_path) {
+        if (is_file($file_path)) {
+            $summary = json_decode(file_get_contents($file_path), true);
+        } else {
+            $summary = [
+                'md5' => '',
+                'elapsed' => 0.0
+            ];
+        }
+        return $summary;
+    }
+
+    /**
+     * 儲存 SVG 轉檔摘要資訊
+     * - md5     輸入值的 MD5 摘要
+     * - elapsed 轉換 SVG 的消耗時間
+     */
+    public static function saveSummary($file_path, $summary) {
+        $json_options = JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
+        $summary_ser = json_encode($summary, $json_options);
+        file_put_contents($file_path, $summary_ser);
+    }
+
 }

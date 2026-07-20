@@ -7,10 +7,6 @@
  * !!! 開發注意事項 !!!
  * - 存檔 1 次實際上會觸發 3 次 render(), 所以必須把生成資訊存檔才能在顯示階段觀察
  * 
- * UX
- * TODO: 紀錄轉檔當下資訊
- * TODO: 語言包校正
- * 
  * Refactoring
  * TODO: 消化 __construct 的 TODO 事項
  * 
@@ -136,35 +132,29 @@ class Hook {
         private string $theme = 'default',
         // SVG 檔案路徑
         private string $svg_file = '',
-        // MD5 檔案路徑
-        private string $md5_file = '',
         // SVG 檔案修改時間
         private int $svg_mtime = 0,
         // SVG HTTP 絕對路徑 (不含 protocol、server name)
         private string $svg_uri = '',
         // SVG 轉檔消耗時間
         private float $elapsed = 0.0,
-        // SVG 開始轉檔時間
-        private float $svg_begin = 0.0,
-        // SVG 結束轉檔時間
-        private float $svg_end = 0.0,
         // SVG 是否成功生成
         private bool $successful = false,
         // 處理過程警示訊息
         private array $warnings = [],
         // 處理過程錯誤訊息
         private array $errors = [],
-        //
+        // 是否顯示環境表
         private bool $dumpEnv = false,
-        //
+        // 是否顯示語法
         private bool $dumpMmd = false,
-        //
+        // 是否偵測到快取
         private bool $hitCache = false,
-        //
+        // 目前的語法 MD5
         private string $md5_incoming = '',
-        //
+        // 快取的語法 MD5
         private string $md5_existed = '',
-        //
+        // 轉檔紀錄
         private string $summary_file = '',
     ) {
         global $IP, $wgScriptPath;
@@ -223,15 +213,14 @@ class Hook {
         $prefix = str_replace(array('\\','/',' '), '_', $parser->mTitle); // TODO: 搬去 self::getSafeName()
         $fn = FileSystemUtils::getSafeName(sprintf('%s-%s', $prefix, $gname));
         $this->svg_file = sprintf('%s/images/quickmmd/%s.svg', $IP, $fn);
-        $this->md5_file = sprintf('%s/images/quickmmd/%s.md5', $IP, $fn);
         $this->svg_uri  = sprintf('%s/images/quickmmd/%s.svg', $wgScriptPath, $fn);
         $this->summary_file = sprintf('%s/images/quickmmd/%s.json', $IP, $fn);
 
         // 快取作業
-        $this->svg_begin = microtime(true);
+        $begin = microtime(true);
         if (ExtensionConstants::ENABLE_SVG_CACHE) {
-            // TODO: 重寫 md5 讀取方式
-            $this->md5_existed = is_file($this->md5_file) ? file_get_contents($this->md5_file) : '';
+            $summary = FileSystemUtils::loadSummary($this->summary_file);
+            $this->md5_existed = $summary['md5'];
             if ($this->md5_incoming === $this->md5_existed) {
                 $this->hitCache = true;
                 $this->successful = true;
@@ -243,8 +232,7 @@ class Hook {
         if (!$this->hitCache) {
             $this->genSvg();
         }
-        $this->svg_end = microtime(true);
-        $this->elapsed = $this->svg_end - $this->svg_begin;
+        $this->elapsed = microtime(true) - $begin;
     }
 
     /**
@@ -289,6 +277,8 @@ class Hook {
      * - 過程中有問題會寫入 $this->errors[]
      */
     private function genSvg() {
+        $begin = microtime(true);
+
         // 執行 php, 產生 dot 語法
         $mmd_tpl = sprintf('%s/../templates/mmd-builder.php', __DIR__);
         $cmd = sprintf(
@@ -336,14 +326,11 @@ class Hook {
         }
 
         // 成功時寫入摘要檔
-        // TODO: 補充要寫入的東西
         $summary = [
-            'md5' => $this->md5_incomoing,
-            'elapsed' => $this->elapsed,
+            'md5'     => $this->md5_incoming,
+            'elapsed' => microtime(true) - $begin,
         ];
-        $json_options = JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
-        $summary_ser = json_encode($summary, $json_options);
-        file_put_contents($this->summary_file, $summary_ser);
+        FileSystemUtils::saveSummary($this->summary_file, $summary);
 
         // 寫入 mmdc 執行結果除錯檔
         FileSystemUtils::dumpDebugFile('mmdc-out.mmd', $out);
@@ -360,9 +347,14 @@ class Hook {
      */
     private function genHtmlOfEnv()
     {
+        // 轉圖時間從摘要檔取得
+        $summary = FileSystemUtils::loadSummary($this->summary_file);
+        // print_r($summary['elapsed']); die();
+        $elapsed_conv = sprintf('%.2f %s', $summary['elapsed'], wfMessage('quickmmd-sec')->plain());
+
         // 資料格式處理
         $size = FileSystemUtils::getFriendlySize($this->svg_file);
-        $elapsed = sprintf('%.2f %s', $this->elapsed, wfMessage('quickmmd-sec')->plain());
+        $elapsed_load = sprintf('%.2f %s', $this->elapsed, wfMessage('quickmmd-sec')->plain());
         $syntax_ref = 'https://mermaid.js.org/intro/syntax-reference.html';
         $about = sprintf(
             '%s - <a href="https://www.mediawiki.org/wiki/Extension:QuickMMD">%s</a>',
@@ -378,22 +370,25 @@ class Hook {
 
         // 表格內資料
         $table_data = [
-            [ 'label' => 'filepath'          , 'data' => $this->svg_uri ],
-            [ 'label' => 'filesize'          , 'data' => $size ],
-            [ 'label' => 'filemtime'         , 'data' => $mtime_str ],
-            // TODO: 加了快取機制這裡很容易變成 0, 原因不明
-            [ 'label' => 'exectime'          , 'data' => $elapsed ],
-            [ 'label' => 'exectime'          , 'data' => $this->svg_begin ],
-            [ 'label' => 'exectime'          , 'data' => $this->svg_end ],
-            [ 'label' => 'hit-cache'         , 'data' => $this->hitCache ? 'Yes' : 'No'],
-            [ 'label' => 'md5-path'          , 'data' => $this->md5_file ],
-            [ 'label' => 'md5-incoming'      , 'data' => $this->md5_incoming ],
-            [ 'label' => 'md5-existed'       , 'data' => $this->md5_existed ],
-            [ 'label' => 'mermaid-cli-path'  , 'data' => self::$mmdc_cmd ],
-            [ 'label' => 'mermaid-cli-ver'   , 'data' => self::$mmdc_ver ],
-            [ 'label' => 'mermaid-syntax-ref', 'data' => $syntax_ref ],
-            [ 'label' => 'quickmmd-ver'      , 'data' => $about ],
+            [ 'label' => 'filepath'  , 'data' => $this->svg_uri ],
+            [ 'label' => 'filesize'  , 'data' => $size ],
+            [ 'label' => 'filemtime' , 'data' => $mtime_str ],
+            [ 'label' => 'time-load' , 'data' => $elapsed_load ],
+            [ 'label' => 'time-conv' , 'data' => $elapsed_conv ],
         ];
+
+        if ($this->hitCache) {
+            $table_data[] = [ 'label' => 'cache-detected', 'data' => 'Yes' ];
+        } else {
+            $table_data[] = [ 'label' => 'cache-detected'   , 'data' => 'No' ];
+            $table_data[] = [ 'label' => 'md5-incoming', 'data' => $this->md5_incoming ];
+            $table_data[] = [ 'label' => 'md5-existed' , 'data' => $this->md5_existed ];
+        }
+        
+        $table_data[] = [ 'label' => 'mermaid-cli-path'  , 'data' => self::$mmdc_cmd ];
+        $table_data[] = [ 'label' => 'mermaid-cli-ver'   , 'data' => self::$mmdc_ver ];
+        $table_data[] = [ 'label' => 'mermaid-syntax-ref', 'data' => $syntax_ref ];
+        $table_data[] = [ 'label' => 'quickmmd-ver'      , 'data' => $about ];
 
         // 每列生成
         $th_style = 'white-space:nowrap;';
