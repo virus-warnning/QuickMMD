@@ -10,5 +10,10 @@
     "mermaid-cli-ver" : "mermaid-cli Version",
     "mermaid-syntax-ref" : "Mermaid syntax Reference",
     "quickmmd-ver"  : "QuickMMD Version",
-    "quickmmd-about": "About QuickMMD"
+    "quickmmd-about": "About QuickMMD",
+    "validation-syntax": "Mermaid 語法長度限 %d 字以內",
+    "validation-name": "命名長度必須 %d~%d 字",
+    "validation-theme": "主題名稱無法識別, 改用 default 主題, 可用選項有 %s",
+    "validation-dump-env": "dump-env 必須是 boolean",
+    "validation-dump-mmd": "dump-env 必須是 boolean"
 }

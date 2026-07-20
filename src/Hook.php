@@ -1,23 +1,26 @@
 <?php
 /**
  * Mermaid Syntax 快速製圖外掛
+ * 
  * @author Raymond Wu https://github.com/virus-warnning
- * 
- * Features
- * TODO: 輸入值合理性檢查後的錯誤訊息整理與輸出
- * TODO: 可自動修復項目標註 warnings
- * 
- * Refactoring
- * TODO: 非核心邏輯分離, 簡化 Hook.php
- * TODO: function 註解
+ *
+ * !!! 開發注意事項 !!!
+ * - 存檔 1 次實際上會觸發 3 次 render(), 所以必須把生成資訊存檔才能在顯示階段觀察
  * 
  * UX
- * TODO: 檔案更新時間 (非當日顯示日期)
- * TODO: 檔案更新時間 (當日只顯示時間)
- * TODO: 命名必要性檢查
- * TODO: theme 容錯與警示
+ * TODO: 紀錄轉檔當下資訊
+ * TODO: 語言包校正
+ * 
+ * Refactoring
+ * TODO: 消化 __construct 的 TODO 事項
  * 
  * ---------------------------------
+ * 
+ * Refactoring
+ * TODO: $sys_errors 會被 Hook 讀, 被 FileSystemUtils 寫, 需要改善可讀性
+ * TODO: 導入 composer.json
+ * TODO: 導入 phplint
+ * TODO: PSR-4, PSR-12
  * 
  * UX
  * TODO: 同頁重複命名檢查
@@ -33,565 +36,521 @@ use ExtensionRegistry;
 
 class Hook {
 
-	/* 是否啟用除錯過程檔 */
-	const DUMP_DEBUG_FILES = true;
+    /* 系統環境錯誤訊息 */
+    public static $sys_errors = [];
 
-	/* mermaid 原始碼內容上限 (10M) */
-	const MAX_INPUTSIZE = 1048576;
+    /* 版本字串 */
+    private static $version = '0.0.0';
 
-	/* 資料格式檢查方式 */
-	const PROPERTIES_DESCRIPTOR = [
-		'name' => [
-			'type' => 'text',      // HTMLForm 的基本文字輸入使用 'text'
-			'required' => true,    // 標記為必要欄位，沒傳或傳空值 validate() 就會失敗
-		],
-		'theme' => [
-			'type' => 'select',    // 下拉選單或嚴格選項驗證使用 'select'
-			'options' => [ 
-				// 格式為：'顯示名稱 (Label)' => '實際值 (Value)'
-				'預設 (Default)' => 'default',
-				'深色 (Dark)'   => 'dark',
-				'森林 (Forest)' => 'forest',
-				'中性 (Neutral)'=> 'neutral',
-				'基礎 (Base)'   => 'base',
-			],
-			'default' => 'default',
-		],
-		'dump-env' => [
-			'type' => 'bool',
-			'default' => false
-		],
-		'dump-mmd' => [
-			'type' => 'bool',
-			'default' => false
-		],
-	];
+    /* php 指令路徑 */
+    private static $php_cmd = '';
 
-	/* 插入 SVG 的 <img> 元素樣式 */
-	const IMG_STYLES = [
-		'width: min-content;',
-		'height: auto;',
-		'border: 1px solid #aaa;',
-		'border-radius: 5px;',
-		'padding: 5px;',
-	];
+    /* mmdc 指令路徑 */
+    private static $mmdc_cmd = '';
 
-	/* 警示訊息與錯誤訊息的 <pre> 元素樣式 */
-	const LOGGING_STYLES = [
-		'display: inline-block;',
-		'margin: 0;',
-		'overflow: scroll;',
-		'max-width: 60%;',
-		'max-height: 250px;',
-		'white-space: pre;',
-		'border-radius: 5px;',
-		'padding: 10px 15px;',
-	];
+    /* mmdc 版本 */
+    private static $mmdc_ver = '';
 
-	/* 系統環境錯誤訊息 */
-	private static $sys_errors = [];
+    /**
+     * 掛載點設定 (由 MediaWiki 觸發)
+     *
+     * @param $parser MediaWiki 的語法處理器
+     */
+    public static function init(&$parser) {
+        // 取得版本字串
+        self::$version = ExtensionRegistry::getInstance()->getAllThings()['QuickMMD']['version'];
 
-	/* 版本字串 */
-	private static $version = '0.0.0';
+        // 取得 php 指令路徑
+        self::$php_cmd = FileSystemUtils::findExecutable('php');
 
-	/* php 指令路徑 */
-	private static $php_cmd = '';
+        // 取得 mmdc 指令路徑
+        self::$mmdc_cmd = FileSystemUtils::findExecutable('mmdc');
 
-	/* mmdc 指令路徑 */
-	private static $mmdc_cmd = '';
+        // 取 mermaid-cli 版本資訊
+        // (stdout) 11.16.0
+        $cmd = sprintf('%s -V', escapeshellarg(self::$mmdc_cmd));
+        self::pipeExec($cmd, '', $out, $err);
+        self::$mmdc_ver = $out;
 
-	/* mmdc 版本 */
-	private static $mmdc_ver = '';
+        // 設定函數鉤
+        $parser->setHook('quickmmd', [self::class, 'render']);
 
-	/**
-	 * 掛載點設定 (由 MediaWiki 觸發)
-	 *
-	 * @param $parser MediaWiki 的語法處理器
-	 */
-	public static function init(&$parser) {
-		// 取得版本字串
-		self::$version = ExtensionRegistry::getInstance()->getAllThings()['QuickMMD']['version'];
+        return true;
+    }
 
-		// 取得 php 指令路徑
-		self::$php_cmd = self::findExecutable('php');
+    /**
+     * 製圖 (由 MediaWiki 觸發)
+     *
+     * @param $mmd_syntax MediaWiki 寫的語法內文
+     * @param $props      標籤內的屬性
+     * @param $parser     MediaWiki 的語法分析器
+     * @param $frame      不知道是啥小
+     */
+    public static function render($mmd_syntax, $props=array(), $parser=null, $frame=false) {
+        // 用來檢查存檔一次會觸發幾次 render(), 平常可以關掉
+        // $action = sprintf('[%s] trigger render()', date('H:i:s'));
+        // FileSystemUtils::dumpDebugFile('actions.txt', $action, FILE_APPEND);
+        // FileSystemUtils::dumpDebugFile('actions.txt', self::getCleanStack(), FILE_APPEND);
+        // FileSystemUtils::dumpDebugFile('actions.txt', '', FILE_APPEND);
 
-		// 取得 mmdc 指令路徑
-		self::$mmdc_cmd = self::findExecutable('mmdc');
+        $hook = new Hook($mmd_syntax, $props, $parser, $frame);
+        return [
+            $hook->genFullHtml(),
+            'noparse' => true,
+            'isHTML' => true
+        ];
+    }
 
-		// 取 mermaid-cli 版本資訊
-		// (stdout) 11.16.0
-		$cmd = sprintf('%s -V', escapeshellarg(self::$mmdc_cmd));
-		self::pipeExec($cmd, '', $out, $err);
-		self::$mmdc_ver = $out;
+    private static function getCleanStack() {
+        $stack = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
+        $cleanStack = [];
+        
+        foreach ($stack as $trace) {
+            // 過濾掉 PHP 內建函數的堆疊，只保留使用者定義的檔案
+            if (isset($trace['file']) && strpos($trace['file'], '/vendor/') === false) {
+                $cleanStack[] = sprintf(
+                    "%s -> %s() at %s:%d",
+                    $trace['class'] ?? 'Global',
+                    $trace['function'] ?? 'unknown',
+                    $trace['file'] ?? 'unknown',
+                    $trace['line'] ?? 0
+                );
+            }
+        }
+        return implode("\n", $cleanStack);
+    }
 
-		// 設定函數鉤
-		$parser->setHook('quickmmd', [self::class, 'render']);
-
-		return true;
-	}
-
-	/**
-	 * 製圖 (由 MediaWiki 觸發)
-	 *
-	 * @param $mmd_syntax MediaWiki 寫的語法內文
-	 * @param $props      標籤內的屬性
-	 * @param $parser     MediaWiki 的語法分析器
-	 * @param $frame      不知道是啥小
-	 */
-	public static function render($mmd_syntax, $props=array(), $parser=null, $frame=false) {
-		// TODO: 這段斟酌解開
-		/*
-		wfDebugLog( 'mytag', 'Input received: ' . $mmd_syntax );
-    	wfDebugLog( 'mytag', 'Args: ' . json_encode( $props ) );
-		$parser->getOutput()->updateCacheExpiry(0);
-		*/
-		return [
-			new self($mmd_syntax, $props, $parser, $frame),
-			'noparse' => true,
-			'isHTML' => true
-		];
-	}
-
-	/**
-	 * 
-	 */
-	public function __construct(
-		// <quickmmd>...</quickmmd> 裡面的內容
-		private string $mmd_syntax,
-		// <quickmmd> 定義的屬性
-		private array $props,
-		// MediaWiki parser
-		private object $parser,
-		// 不知道
-		private object $frame,
-		// 主題
-		private string $theme = 'default',
-		// SVG 檔案路徑
-		private string $svg_file = '',
-		// SVG 檔案修改時間
-		private int $svg_mtime = 0,
-		// SVG HTTP 絕對路徑 (不含 protocol、server name)
-		private string $svg_uri = '',
-		// SVG 轉檔消耗時間
-		private float $elapsed = 0.0,
-		// SVG 是否成功生成
-		private bool $successful = false,
-		// MD5 checksum 檢查是否改過
-		private string $checksum = '',
-		// 處理過程警示訊息
-		private array $warnings = [],
-		// 處理過程錯誤訊息
-		private array $errors = [],
+    /**
+     * 生成 Parser Hook <quickmmd>
+     */
+    public function __construct(
+        // <quickmmd>...</quickmmd> 裡面的內容
+        private string $mmd_syntax,
+        // <quickmmd> 定義的屬性
+        private array $props,
+        // MediaWiki parser
+        private object $parser,
+        // 不知道
+        private object $frame,
+        // 主題
+        private string $theme = 'default',
+        // SVG 檔案路徑
+        private string $svg_file = '',
+        // MD5 檔案路徑
+        private string $md5_file = '',
+        // SVG 檔案修改時間
+        private int $svg_mtime = 0,
+        // SVG HTTP 絕對路徑 (不含 protocol、server name)
+        private string $svg_uri = '',
+        // SVG 轉檔消耗時間
+        private float $elapsed = 0.0,
+        // SVG 開始轉檔時間
+        private float $svg_begin = 0.0,
+        // SVG 結束轉檔時間
+        private float $svg_end = 0.0,
+        // SVG 是否成功生成
+        private bool $successful = false,
+        // 處理過程警示訊息
+        private array $warnings = [],
+        // 處理過程錯誤訊息
+        private array $errors = [],
+        //
+        private bool $dumpEnv = false,
+        //
+        private bool $dumpMmd = false,
+        //
+        private bool $hitCache = false,
+        //
+        private string $md5_incoming = '',
+        //
+        private string $md5_existed = '',
+        //
+        private string $summary_file = '',
     ) {
-		global $IP, $wgScriptPath;
+        global $IP, $wgScriptPath;
 
-		// 暫時測試用
-		// $this->warnings = [
-		// 	'模擬警示1',
-		// 	'模擬警示2',
-		// ];
-		// $this->errors = [
-		// 	'模擬錯誤1',
-		// 	'模擬錯誤2',
-		// ];
+        // 暫時測試用
+        // $this->warnings = [
+        // 	'模擬警示1',
+        // 	'模擬警示2',
+        // ];
+        // $this->errors = [
+        // 	'模擬錯誤1',
+        // 	'模擬錯誤2',
+        // ];
 
-		// 系統環境異常時忽略後續作業
-		if (count(self::$sys_errors) > 0) return;
+        // 系統環境異常時忽略後續作業
+        if (count(self::$sys_errors) > 0) return;
 
-		// 輸入值檢查
-		// TODO: 切出另一個 function 處理
-		// $mmd_syntax 上限管制
-		if (strlen($mmd_syntax) > self::MAX_INPUTSIZE) {
-			$msg = sprintf('Input data exceed %s.', self::getFriendlySize(self::MAX_INPUTSIZE));
-			return self::showError($msg);
-		}
-		Validator::validate($props);
+        // 輸入值檢查
+        $props['syntax'] = $mmd_syntax;
+        $results = Validator::validate($props);
+        if (!$results['Passed']) {
+            foreach ($results['Fields'] as $fieldResult) {
+                if ($fieldResult->ErrorMessage !== '') {
+                    $this->errors[] = $fieldResult->ErrorMessage;
+                }
+            }
+            return;
+        }
 
-		// 前置作業
-		// TODO: 切出另一個 function 處理
-		$this->checksum = md5(json_encode($props).$mmd_syntax);
-		$this->theme = 'forest';
-		$prefix = str_replace(array('\\','/',' '), '_', $parser->mTitle); // TODO: 搬去 self::getSafeName()
-		$gname = 'sucks';
-		$fn = self::getSafeName(sprintf('%s-%s', $prefix, $gname));
-		$this->svg_file = sprintf('%s/images/quickmmd/%s.svg', $IP, $fn);
-		$this->svg_uri  = sprintf('%s/images/quickmmd/%s.svg', $wgScriptPath, $fn);
+        // 讀取校正值與生成警示訊息
+        // TODO: 需要改成 key => value 回傳值, 才能省略 switch
+        $gname = 'sucks';
+        foreach ($results['Fields'] as $fieldResult) {
+            switch($fieldResult->Field) {
+                case 'name':
+                    $gname = $fieldResult->FilteredValue;
+                    break;
+                case 'theme':
+                    $this->theme = $fieldResult->FilteredValue;
+                    break;
+                case 'dump-env':
+                    $this->dumpEnv = $fieldResult->FilteredValue;
+                    break;
+                case 'dump-mmd':
+                    $this->dumpMmd = $fieldResult->FilteredValue;
+                    break;
+            }
+            if ($fieldResult->WarningMessage !== '') {
+                $this->warnings[] = $fieldResult->WarningMessage;
+            }
+        }
 
-		// 快取作業
-		// TODO
+        // 前置作業
+        // TODO: 切出另一個 function 處理
+        $this->md5_incoming = md5(json_encode($props).$mmd_syntax);
+        $prefix = str_replace(array('\\','/',' '), '_', $parser->mTitle); // TODO: 搬去 self::getSafeName()
+        $fn = FileSystemUtils::getSafeName(sprintf('%s-%s', $prefix, $gname));
+        $this->svg_file = sprintf('%s/images/quickmmd/%s.svg', $IP, $fn);
+        $this->md5_file = sprintf('%s/images/quickmmd/%s.md5', $IP, $fn);
+        $this->svg_uri  = sprintf('%s/images/quickmmd/%s.svg', $wgScriptPath, $fn);
+        $this->summary_file = sprintf('%s/images/quickmmd/%s.json', $IP, $fn);
 
-		// SVG 生成
-		$this->genSvg();
-	}
+        // 快取作業
+        $this->svg_begin = microtime(true);
+        if (ExtensionConstants::ENABLE_SVG_CACHE) {
+            // TODO: 重寫 md5 讀取方式
+            $this->md5_existed = is_file($this->md5_file) ? file_get_contents($this->md5_file) : '';
+            if ($this->md5_incoming === $this->md5_existed) {
+                $this->hitCache = true;
+                $this->successful = true;
+                $this->svg_mtime = filemtime($this->svg_file);
+            }
+        }
 
-	/**
-	 * 顯示內容控制
-	 */
-	public function __toString()
-	{
-		// 顯示主要內容
-		// - 轉檔成功: 警示訊息 + SVG 
-		// - 轉檔失敗: 錯誤訊息
-		if ($this->successful) {
-			$html = $this->genHtmlOfWarnings();
-			self::dumpDebugFile('html-warnings.txt', $html);
-			$html .= sprintf(
-				'<img src="%s?t=%d" style="%s" />',
-				$this->svg_uri,
-				$this->svg_mtime,
-				join('', self::IMG_STYLES),
-			);
-		} else {
-			$html = $this->genHtmlOfErrors();
-			self::dumpDebugFile('html-errors.txt', $html);
-		}
+        // SVG 生成
+        if (!$this->hitCache) {
+            $this->genSvg();
+        }
+        $this->svg_end = microtime(true);
+        $this->elapsed = $this->svg_end - $this->svg_begin;
+    }
 
-		// 顯示環境資訊
-		$dump_env = self::getParam($this->props, 'dump-env', 'false');
-		if ($dump_env==='true') {
-			$html .= $this->genHtmlOfEnv();
-		}
+    /**
+     * 輸出 HTML
+     */
+    public function genFullHtml() {
+        // 顯示主要內容
+        // - 轉檔成功: 警示訊息 + SVG 
+        // - 轉檔失敗: 錯誤訊息
+        if ($this->successful) {
+            $html = $this->genHtmlOfWarnings();
+            FileSystemUtils::dumpDebugFile('html-warnings.txt', $html);
+            $html .= sprintf(
+                '<img src="%s?t=%d" style="%s" />',
+                $this->svg_uri,
+                $this->svg_mtime,
+                join('', ExtensionConstants::IMG_STYLES),
+            );
+        } else {
+            $html = $this->genHtmlOfErrors();
+            FileSystemUtils::dumpDebugFile('html-errors.txt', $html);
+        }
 
-		// 顯示原始碼
-		$dump_mmd = self::getParam($this->props, 'dump-mmd' , 'false');
-		if ($dump_mmd==='true') {
-			$html .= $this->genHtmlOfSyntax();
-		}
+        // 顯示環境資訊
+        if ($this->dumpEnv) {
+            $html .= $this->genHtmlOfEnv();
+        }
 
-		return $html;
-	}
+        // 顯示原始碼
+        if ($this->dumpMmd) {
+            $html .= $this->genHtmlOfSyntax();
+        }
 
-	private function genSvg() {
-		$begin = microtime(true);
+        return $html;
+    }
 
-		// 執行 php, 產生 dot 語法
-		$mmd_tpl = sprintf('%s/../templates/mmd-builder.php', __DIR__);
-		$cmd = sprintf(
-			'%s %s %s',
-			escapeshellarg(self::$php_cmd), // php
-			escapeshellarg($mmd_tpl),       // ./QuickMMD.template.php
-			$this->theme                    // theme
-		);
-		$retval = self::pipeExec($cmd, $this->mmd_syntax, $done_syntax, $err, 'utf-8');
-		if ($retval !== 0) {
-			$this->errors[] = 'Cannot compose mermaid syntax.';
-			$this->errors[] = $err;
-			return;
-		}
+    /**
+     * 生成 SVG 圖
+     * 
+     * - step 1: 組合 Mermaid 語法
+     * - step 2: 組合後語法轉換 SVG 圖
+     * - 過程中有問題會寫入 $this->errors[]
+     */
+    private function genSvg() {
+        // 執行 php, 產生 dot 語法
+        $mmd_tpl = sprintf('%s/../templates/mmd-builder.php', __DIR__);
+        $cmd = sprintf(
+            '%s %s %s',
+            escapeshellarg(self::$php_cmd), // php
+            escapeshellarg($mmd_tpl),       // ./QuickMMD.template.php
+            $this->theme                    // theme
+        );
+        $retval = self::pipeExec($cmd, $this->mmd_syntax, $done_syntax, $err, 'utf-8');
+        if ($retval !== 0) {
+            $this->errors[] = 'Cannot compose mermaid syntax.';
+            $this->errors[] = $err;
+            return;
+        }
 
-		// 寫入語法合併除錯檔
-		self::dumpDebugFile('merged.mmd', $done_syntax);
+        // 寫入語法合併除錯檔
+        FileSystemUtils::dumpDebugFile('merged.mmd', $done_syntax);
 
-		// 轉檔設定
-		$pfile = sprintf('%s/../config-puppeteer.json', __DIR__);
+        // 轉檔設定
+        $pfile = sprintf('%s/../config-puppeteer.json', __DIR__);
 
-		// 執行 mmdc, 產生 svg 圖檔
-		$cmd = sprintf('%s -q -i - -p %s -o %s',
-			escapeshellarg(self::$mmdc_cmd),
-			escapeshellarg($pfile),
-			escapeshellarg($this->svg_file)
-		);
-		$retval = self::pipeExec($cmd, $done_syntax, $out, $err, 'utf-8');
-		if ($retval !== 0) {
-			// 先把 stdout 的 call stack 過濾掉, 完整 stderr 長這樣
-			//
-			// Error: Parse error on line 4:
-			// ...chart  A1 -- B231
-			// --------------------^
-			// Expecting 'LINK', 'UNICODE_TEXT', 'EDGE_TEXT', got '1'
-			// Parser.parseError (https://mermaid-cli-intercept.invalid/ ...
-			//     at #evaluate (file:///usr/lib/node_modules/@mermaid-js/ ...
-			//     at async ExecutionContext.evaluate (file:///usr/lib/ ...
-			$stack_pos = strpos($err, 'Parser.parseError (https://');
-			$key_message = trim(substr($err, 0, $stack_pos));
-			$this->errors[] = sprintf('Cannot convert SVG by mmdc. (retval=%d)', $retval);
-			$this->errors[] = sprintf('Shell command: %s', $cmd);
-			$this->errors[] = $key_message;
-			return;
-		}
+        // 執行 mmdc, 產生 svg 圖檔
+        $cmd = sprintf('%s -q -i - -p %s -o %s',
+            escapeshellarg(self::$mmdc_cmd),
+            escapeshellarg($pfile),
+            escapeshellarg($this->svg_file)
+        );
+        $retval = self::pipeExec($cmd, $done_syntax, $out, $err, 'utf-8');
+        if ($retval !== 0) {
+            // 先把 stdout 的 call stack 過濾掉, 完整 stderr 長這樣
+            //
+            // Error: Parse error on line 4:
+            // ...chart  A1 -- B231
+            // --------------------^
+            // Expecting 'LINK', 'UNICODE_TEXT', 'EDGE_TEXT', got '1'
+            // Parser.parseError (https://mermaid-cli-intercept.invalid/ ...
+            //     at #evaluate (file:///usr/lib/node_modules/@mermaid-js/ ...
+            //     at async ExecutionContext.evaluate (file:///usr/lib/ ...
+            $stack_pos = strpos($err, 'Parser.parseError (https://');
+            $key_message = trim(substr($err, 0, $stack_pos));
+            $this->errors[] = sprintf('Cannot convert SVG by mmdc. (retval=%d)', $retval);
+            $this->errors[] = sprintf('Shell command: %s', $cmd);
+            $this->errors[] = $key_message;
+            return;
+        }
 
-		// 寫入 mmdc 執行結果除錯檔
-		self::dumpDebugFile('mmdc-out.mmd', $out);
-		self::dumpDebugFile('mmdc-err.mmd', $err);
+        // 成功時寫入摘要檔
+        // TODO: 補充要寫入的東西
+        $summary = [
+            'md5' => $this->md5_incomoing,
+            'elapsed' => $this->elapsed,
+        ];
+        $json_options = JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
+        $summary_ser = json_encode($summary, $json_options);
+        file_put_contents($this->summary_file, $summary_ser);
 
-		$this->elapsed = microtime(true) - $begin;
-		$this->svg_mtime = filemtime($this->svg_file);
-		$this->successful = ($retval === 0);
-	}
+        // 寫入 mmdc 執行結果除錯檔
+        FileSystemUtils::dumpDebugFile('mmdc-out.mmd', $out);
+        FileSystemUtils::dumpDebugFile('mmdc-err.mmd', $err);
 
-	/**
-	 * 生成系統資訊表, dump-env="true" 的時候使用
-	 */
-	private function genHtmlOfEnv()
-	{
-		// 資料格式處理
-		$size = self::getFriendlySize($this->svg_file);
-		$elapsed = sprintf('%.2f %s', $this->elapsed, wfMessage('quickmmd-sec')->plain());
-		$syntax_ref = 'https://mermaid.js.org/intro/syntax-reference.html';
-		$about = sprintf(
-			'%s - <a href="https://www.mediawiki.org/wiki/Extension:QuickMMD">%s</a>',
-			self::$version,
-			wfMessage('quickmmd-about')->plain()
-		);
+        $this->svg_mtime = filemtime($this->svg_file);
+        $this->successful = ($retval === 0);
+    }
 
-		$mtime_str = 'N/A';
-		if ($this->svg_mtime > 0) {
-			$time_diff = microtime(true) - $this->svg_mtime;
-			$mtime_str = ($time_diff > 86400) ? date('Y-m-d', $this->svg_mtime): date('H:i:s', $this->svg_mtime);
-		}
+    /**
+     * 生成系統資訊表, dump-env="true" 的時候使用
+     * 
+     * @return string 系統資訊表的 HTML 原始碼
+     */
+    private function genHtmlOfEnv()
+    {
+        // 資料格式處理
+        $size = FileSystemUtils::getFriendlySize($this->svg_file);
+        $elapsed = sprintf('%.2f %s', $this->elapsed, wfMessage('quickmmd-sec')->plain());
+        $syntax_ref = 'https://mermaid.js.org/intro/syntax-reference.html';
+        $about = sprintf(
+            '%s - <a href="https://www.mediawiki.org/wiki/Extension:QuickMMD">%s</a>',
+            self::$version,
+            wfMessage('quickmmd-about')->plain()
+        );
 
-		// 表格內資料
-		$table_data = [
-			[ 'label' => 'filepath'          , 'data' => $this->svg_uri ],
-			[ 'label' => 'filesize'          , 'data' => $size ],
-			[ 'label' => 'filemtime'         , 'data' => $mtime_str ],
-			[ 'label' => 'exectime'          , 'data' => $elapsed ],
-			[ 'label' => 'md5sum'            , 'data' => $this->checksum ],
-			[ 'label' => 'mermaid-cli-path'  , 'data' => self::$mmdc_cmd ],
-			[ 'label' => 'mermaid-cli-ver'   , 'data' => self::$mmdc_ver ],
-			[ 'label' => 'mermaid-syntax-ref', 'data' => $syntax_ref ],
-			[ 'label' => 'quickmmd-ver'      , 'data' => $about ],
-		];
+        $mtime_str = 'N/A';
+        if ($this->svg_mtime > 0) {
+            $time_diff = microtime(true) - $this->svg_mtime;
+            $mtime_str = ($time_diff > 86400) ? date('Y-m-d', $this->svg_mtime): date('H:i:s', $this->svg_mtime);
+        }
 
-		// 每列生成
-		$th_style = 'white-space:nowrap;';
-		$td_style = 'text-align:left;';
-		$trs = array();
-		foreach ($table_data as $entry)	{
-			$trs[] = sprintf(
-				'<tr><th style="%s">%s</th><td style="%s">%s</td></tr>',
-				$th_style, wfMessage($entry['label'])->plain(),
-				$td_style, $entry['data']
-			);
-		}
-		
-		// 表格生成
-		$table_html = sprintf(
-			'<table class="wikitable" style="width:600px; margin:5px 0 0 0;"><tbody>%s</tbody></table>',
-			implode("\n", $trs)
-		);
-		return $table_html;
-	}
+        // 表格內資料
+        $table_data = [
+            [ 'label' => 'filepath'          , 'data' => $this->svg_uri ],
+            [ 'label' => 'filesize'          , 'data' => $size ],
+            [ 'label' => 'filemtime'         , 'data' => $mtime_str ],
+            // TODO: 加了快取機制這裡很容易變成 0, 原因不明
+            [ 'label' => 'exectime'          , 'data' => $elapsed ],
+            [ 'label' => 'exectime'          , 'data' => $this->svg_begin ],
+            [ 'label' => 'exectime'          , 'data' => $this->svg_end ],
+            [ 'label' => 'hit-cache'         , 'data' => $this->hitCache ? 'Yes' : 'No'],
+            [ 'label' => 'md5-path'          , 'data' => $this->md5_file ],
+            [ 'label' => 'md5-incoming'      , 'data' => $this->md5_incoming ],
+            [ 'label' => 'md5-existed'       , 'data' => $this->md5_existed ],
+            [ 'label' => 'mermaid-cli-path'  , 'data' => self::$mmdc_cmd ],
+            [ 'label' => 'mermaid-cli-ver'   , 'data' => self::$mmdc_ver ],
+            [ 'label' => 'mermaid-syntax-ref', 'data' => $syntax_ref ],
+            [ 'label' => 'quickmmd-ver'      , 'data' => $about ],
+        ];
 
-	private function genHtmlOfSyntax()
-	{
-		// 用 <code> 會出問題, 原因還不清楚
-		$trimmed = trim($this->mmd_syntax);
-		if ($trimmed !== '') {
-			return sprintf('<pre>%s</pre>', htmlspecialchars($trimmed));
-		} else {
-			return '';
-		}
-	}
+        // 每列生成
+        $th_style = 'white-space:nowrap;';
+        $td_style = 'text-align:left;';
+        $trs = array();
+        foreach ($table_data as $entry)	{
+            $trs[] = sprintf(
+                '<tr><th style="%s">%s</th><td style="%s">%s</td></tr>',
+                $th_style, wfMessage($entry['label'])->plain(),
+                $td_style, $entry['data']
+            );
+        }
+        
+        // 表格生成
+        $table_html = sprintf(
+            '<table class="wikitable" style="width:600px; margin:5px 0 0 0;"><tbody>%s</tbody></table>',
+            implode("\n", $trs)
+        );
+        return $table_html;
+    }
 
-	private function genHtmlOfWarnings() {
-		return $this->genHtmlOfLogs('warning', $this->warnings);
-	}
+    /**
+     * 生成語法顯示訊息, 會顯示合併後的完整 Mermaid 語法
+     * 
+     * @return string 語法顯示訊息的 HTML 原始碼
+     */
+    private function genHtmlOfSyntax()
+    {
+        $trimmed = trim($this->mmd_syntax);
+        if ($trimmed !== '') {
+            // 目前 Pygments 還不相容 mermaid, 等以後可以了再解開
+            // $wikiText = sprintf('<syntaxhighlight lang="mermaid">%s</syntaxhighlight>', $trimmed);
+            // return $this->parser->recursiveTagParseFully($wikiText);
 
-	private function genHtmlOfErrors() {
-		$errors = array_merge(self::$sys_errors, $this->errors);
-		return $this->genHtmlOfLogs('error', $errors);
-	}
+            // 先用 lang="text" 頂著
+            $wikiText = sprintf('<syntaxhighlight lang="text" line>%s</syntaxhighlight>', $trimmed);
+            return $this->parser->recursiveTagParseFully($wikiText);
+        } else {
+            return '';
+        }
+    }
 
-	private static function genHtmlOfLogs($level, $logs) {
-		if (count($logs) === 0) return '';
-		$classes = [
-			"mw-message-box-$level",
-			'mw-message-box'
-		];
-		return sprintf(
-			'<pre class="%s" style="%s">%s</pre>',
-			join(' ', $classes),
-			join(' ', self::LOGGING_STYLES),
-			htmlspecialchars(join("\n", $logs))
-		);
-	}
+    /**
+     * 生成錯誤訊息, 僅生成失敗時會出現
+     * 
+     * @return string 生成錯誤/警示訊息的 HTML 原始碼
+     */
+    private function genHtmlOfErrors() {
+        $errors = array_merge(self::$sys_errors, $this->errors);
+        return $this->genHtmlOfLogs('error', $errors);
+    }
 
-	/**
-	 * 取得設定值，如果沒提供就使用預設值
-	 *
-	 * @param  $params  設定值組
-	 * @param  $key     設定值名稱
-	 * @param  $default 預設值
-	 * @return 預期結果
-	 */
-	private static function getParam(&$params, $key, $default='') {
-		if (isset($params[$key])) {
-			if (trim($params[$key])!=='') return $params[$key];
-		}
-		return $default;
-	}
+    /**
+     * 生成警示訊息, 僅生成成功時會出現在 SVG 上方
+     * 
+     * @return string 生成錯誤/警示訊息的 HTML 原始碼
+     */
+    private function genHtmlOfWarnings() {
+        return $this->genHtmlOfLogs('warning', $this->warnings);
+    }
 
-	/**
-	 * 取得人性化的檔案大小
-	 *
-	 * @param $size 位元組數
-	 */
-	private static function getFriendlySize($svgfile) {
-		static $unit_ch = array('B','KB','MB');
+    /**
+     * 生成錯誤/警示訊息的共用部分
+     * 
+     * @param  string $level error | warning
+     * @param  array  $logs  錯誤或警示訊息
+     * @return string 生成錯誤/警示訊息的 HTML 原始碼
+     */
+    private static function genHtmlOfLogs($level, $logs) {
+        if (count($logs) === 0) return '';
+        $classes = [
+            "mw-message-box-$level",
+            'mw-message-box'
+        ];
+        return sprintf(
+            '<pre class="%s" style="%s">%s</pre>',
+            join(' ', $classes),
+            join(' ', ExtensionConstants::LOGGING_STYLES),
+            htmlspecialchars(join("\n", $logs))
+        );
+    }
 
-		$size = file_exists($svgfile) ? filesize($svgfile) : 0;
-		$unit_lv = 0;
-		while ($size>=1024 && $unit_lv<=2) {
-			$size /= 1024;
-			$unit_lv++;
-		}
+    /**
+     * shell 執行程式
+     *
+     * @param  string $cmd      執行的 shell 指令
+     * @param  string $stdin    輸入給指令的內容
+     * @param  string $stdout   指令標準輸出內容
+     * @param  string $stderr   指令標準錯誤內容
+     * @param  string $encoding 指令標準輸出/標準錯誤的文字編碼, 預設自動偵測
+     * @return int    回傳錯誤碼, 0 表示正常結束
+     */
+    private static function pipeExec($cmd, $stdin='', &$stdout='', &$stderr='', $encoding='sys') {
+        static $sys_encoding = '';
 
-		if ($unit_lv==0) {
-			return sprintf('%d %s', $size, $unit_ch[$unit_lv]);
-		} else {
-			return sprintf('%.2f %s', $size, $unit_ch[$unit_lv]);
-		}
-	}
+        if ($encoding==='sys') {
+            // detect system encoding once
+            if ($sys_encoding==='') {
+                if (PHP_OS==='WINNT') {
+                    // for Windows
+                    $lastln = exec('chcp', $stdout, $retval);
+                    if ($retval===0) {
+                        $ok = preg_match('/: (\d+)$/', $lastln, $matches);
+                        if ($ok===1) $sys_encoding = sprintf('cp%d', (int)$matches[1]);
+                    }
+                } else {
+                    // for Linux / OSX / BSD
+                    // TODO: ...
+                }
 
-	/**
-	 * shell 執行程式
-	 *
-	 */
-	private static function pipeExec($cmd, $stdin='', &$stdout='', &$stderr='', $encoding='sys') {
-		static $sys_encoding = '';
+                if ($sys_encoding==='') $sys_encoding = 'utf-8';
+            }
 
-		if ($encoding==='sys') {
-			// detect system encoding once
-			if ($sys_encoding==='') {
-				if (PHP_OS==='WINNT') {
-					// for Windows
-					$lastln = exec('chcp', $stdout, $retval);
-					if ($retval===0) {
-						$ok = preg_match('/: (\d+)$/', $lastln, $matches);
-						if ($ok===1) $sys_encoding = sprintf('cp%d', (int)$matches[1]);
-					}
-				} else {
-					// for Linux / OSX / BSD
-					// TODO: ...
-				}
+            // apply system encoding
+            $encoding = $sys_encoding;
+        }
 
-				if ($sys_encoding==='') $sys_encoding = 'utf-8';
-			}
+        // pipe all streams
+        $desc = array(
+            array('pipe', 'r'), // stdin
+            array('pipe', 'w'), // stdout
+            array('pipe', 'w')  // stderr
+        );
 
-			// apply system encoding
-			$encoding = $sys_encoding;
-		}
+        // run the command
+        if (PHP_OS==='WINNT') $cmd = sprintf('"%s"', $cmd); // hack for windows
+        $proc = proc_open($cmd, $desc, $pipes);
+        if (is_resource($proc)) {
+            $encoding = strtolower($encoding);
 
-		// pipe all streams
-		$desc = array(
-			array('pipe', 'r'), // stdin
-			array('pipe', 'w'), // stdout
-			array('pipe', 'w')  // stderr
-		);
+            // feed stdin
+            if ($encoding!=='utf-8') {
+                $stdin = iconv('utf-8', $encoding, $stdin);
+            }
+            fwrite($pipes[0], $stdin);
+            fclose($pipes[0]);
 
-		// run the command
-		if (PHP_OS==='WINNT') $cmd = sprintf('"%s"', $cmd); // hack for windows
-		$proc = proc_open($cmd, $desc, $pipes);
-		if (is_resource($proc)) {
-			$encoding = strtolower($encoding);
+            // read stdout
+            $stdout = stream_get_contents($pipes[1]);
+            if ($encoding!=='utf-8') {
+                $stdout = iconv($encoding, 'utf-8', $stdout);
+            }
+            fclose($pipes[1]);
 
-			// feed stdin
-			if ($encoding!=='utf-8') {
-				$stdin = iconv('utf-8', $encoding, $stdin);
-			}
-			fwrite($pipes[0], $stdin);
-			fclose($pipes[0]);
+            // read stderr
+            $stderr = stream_get_contents($pipes[2]);
+            if ($encoding!=='utf-8') {
+                $stderr = iconv($encoding, 'utf-8', $stderr);
+            }
+            fclose($pipes[2]);
 
-			// read stdout
-			$stdout = stream_get_contents($pipes[1]);
-			if ($encoding!=='utf-8') {
-				$stdout = iconv($encoding, 'utf-8', $stdout);
-			}
-			fclose($pipes[1]);
+            $retval = proc_close($proc);
+        } else {
+            $retval = -1;
+        }
 
-			// read stderr
-			$stderr = stream_get_contents($pipes[2]);
-			if ($encoding!=='utf-8') {
-				$stderr = iconv($encoding, 'utf-8', $stderr);
-			}
-			fclose($pipes[2]);
-
-			$retval = proc_close($proc);
-		} else {
-			$retval = -1;
-		}
-
-		return $retval;
-	}
-
-	/**
-	 * 搜尋程式的完整路徑
-	 * - 只會在 init() 時呼叫
-	 * - Windows 以外的系統用 which 找
-	 * - Windows 待研究
-	 *
-	 * @param  $exec_name 程式名稱
-	 * @return 程式完整路徑
-	 */
-	private static function findExecutable($exec_name) {
-		if (PHP_OS !== 'WINNT') {
-			// 先嘗試用 which 找看看
-			$exec_path = exec("which $exec_name");
-			// 不行再去特定 bin 目錄找
-			if ($exec_path==='') {
-				$search_dirs = array(
-					'/usr/bin',
-					'/usr/local/bin'
-				);
-				foreach ($search_dirs as $dir) {
-					$p = sprintf('%s/%s',$dir,$exec_name);
-					if (file_exists($p)) {
-						$exec_path = $p;
-						break;
-					}
-				}
-			}
-		}
-
-		// 產生沒找到的錯誤訊息
-		if ($exec_path === '') {
-			self::$sys_errors[] = sprintf('%s not found.', $exec_name);
-			return '';
-		}
-
-		// 產生有找到但不能執行的錯誤訊息
-		if (!is_executable($exec_path)) {
-			self::$sys_errors[] = sprintf('%s is not executable.', $exec_name);
-			return '';
-		}
-
-		return $exec_path;
-	}
-
-	private static function dumpDebugFile($file_name, $file_content) {
-		if (!self::DUMP_DEBUG_FILES) return;
-
-		$debug_dir = sprintf('%s/../debug', __DIR__);
-		if (!is_dir($debug_dir)) {
-			mkdir($debug_dir);
-		}
-		
-		$target_file = sprintf('%s/%s', $debug_dir, $file_name);
-		file_put_contents($target_file, $file_content);
-	}
-
-	/**
-	 * 檔名迴避 Windows 不接受的字元
-	 *
-	 * @param $unsafename
-	 */
-	private static function getSafeName($unsafename) {
-		$safename = '';
-		$slen = strlen($unsafename);
-
-		// escape non-ascii chars
-		for($i=0;$i<$slen;$i++) {
-			$ch = $unsafename[$i];
-			$cc = ord($ch);
-			if ($cc<32 || $cc>127) {
-				$safename .= sprintf('x%02x',$cc);
-			} else {
-				$safename .= $ch;
-			}
-		}
-
-		return $safename;
-	}
-	
+        return $retval;
+    }
+    
 }

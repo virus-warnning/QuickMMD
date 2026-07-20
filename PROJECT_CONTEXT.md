@@ -10,13 +10,15 @@
 - **External APIs**: TODO
 
 ## 📂 Directory Structure
-- `/i18n`: terms definition
-- `config-mmdc.json`: config file for mermaid-cli
+- `i18n/`: terms definition
 - `config-puppeteer.json`: config file for puppeteer
 - `extension.json`: information of this extension
-- `QuickMMD.body.php`: parser hook
-- `QuickMMD.i18n.php`: language loader
-- `QuickMMD.template.php`: mermaid syntax composer
+- `src/ExtensioConstants.php`: global constants for this extension
+- `src/FieldResult.php`: the result of single field validation
+- `src/FileSystemUtils.php`: static functions for file system handling
+- `src/Hook.php`: parser hook
+- `src/Validator.php`: validator for properties of parser hook
+- `templates/mmd-builder.php`: merge user mermaid syntax & default mermaid syntax
 
 ## 🔄 Key Workflows
 - **MediaWiki would invoke QuickMMD::init() on <quickmmd> element detected.**: 

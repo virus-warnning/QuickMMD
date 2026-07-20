@@ -1,13 +1,13 @@
 <?php
 function shell_arg($rank, $default_value='') {
-	global $argv;
+  global $argv;
 
-	if (isset($argv[$rank])) {
-		$v = trim($argv[$rank]);
-		if ($v!=='') return $v;
-	}
+  if (isset($argv[$rank])) {
+    $v = trim($argv[$rank]);
+    if ($v!=='') return $v;
+  }
 
-	return $default_value;
+  return $default_value;
 }
 
 // get theme name
