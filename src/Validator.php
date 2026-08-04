@@ -31,7 +31,7 @@ class Validator {
      */
     public static function getDescriptor() {
         $boolSpec = [
-            'type' => 'bool',
+            'type' => 'select',
             'options' => [ 
                 'true' => 'true',
                 'false' => 'false',
@@ -113,7 +113,6 @@ class Validator {
         $typeToClassMap = [
             'text'   => \HTMLTextField::class,
             'select' => \HTMLSelectField::class,
-            'bool'   => \HTMLSelectField::class,
         ];
 
         foreach ( $descriptor as $name => $fieldSpec ) {
@@ -137,6 +136,9 @@ class Validator {
             if ( $validationResult !== true ) {
                 $langKey = sprintf('validation-%s', $name);
                 if (isset($fieldSpec['default'])) {
+                    // 完全沒給值使用預設值的時候, 不跳警告
+                    // TODO: 最好可以讓 HTMLSelectField 就處理掉這個問題, 需要單獨拉出來寫測試
+                    if ($rawValue === null) continue;
                     $message = self::buildValidationMessage($name, $fieldSpec);
                     $result = FieldResult::CreateWarning($name, $fieldSpec['default'], $message);
                     $fieldResults[] = $result;
