@@ -1,0 +1,15 @@
+name = "qmmd"
+description = "for MediaWiki extension QuickMMD development"
+
+# 自己的 Local LM
+model = "openai/gemma4-e4b"
+
+# 讀取專案目錄內的 axe/skills/SKILL.md
+skill = "${PWD}/axe/skills/SKILL.md"
+
+# 允許操作的工具
+tools = [
+  "list_directory",
+  "read_file",
+  "write_file"
+]
