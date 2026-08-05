@@ -1,0 +1,25 @@
+{
+    "name": "raymond/quick-mmd",
+    "description": "QuickMMD, a MediaWiki extension for SVG rendering by Mermaid syntax.",
+    "type": "metapackage",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Raymond\\QuickMmd\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Raymond Wu",
+            "email": "virus.warnning@gmail.com"
+        }
+    ],
+    "scripts": {
+        "lint": "phpcs src/",
+        "stan": "phpstan analyze"
+    },
+    "require-dev": {
+        "squizlabs/php_codesniffer": "^4.0",
+        "phpstan/phpstan": "^2.2"
+    }
+}

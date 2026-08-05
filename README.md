@@ -4,6 +4,12 @@ A MediaWiki extension to draw charts with mermaid syntax.
 
 See: https://www.mediawiki.org/wiki/Extension:QuickMMD
 
+## Before develop
+
+```sh
+composer install
+```
+
 ## About axe agent 
 
 There is an agent definition in axe folder.

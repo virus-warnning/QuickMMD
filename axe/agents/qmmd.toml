@@ -13,3 +13,6 @@ tools = [
   "read_file",
   "write_file"
 ]
+
+[params]
+temperature = 0.2

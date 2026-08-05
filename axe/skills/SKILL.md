@@ -6,6 +6,7 @@ User can use <quickmmd> tag as MediaWiki parser hook to trigger it generate a SV
 You are responsible for improvement.  
 
 ## Layers
+- `composer.json`: composer.json
 - `extension.json`: Metadata of MediaWiki extension QuickMMD
 - `config-puppeteer.json`: config file for `mmdc` execution
 - `src/Hook.php`: entry point of this parser hook
@@ -18,7 +19,6 @@ You are responsible for improvement.
 
 ## Conventions
 - Follow PSR-4 rules for `src/*.php`
-- Append two new line chars for each reply.
 
 ## Constraints
 - Don't modify `extension.json`
