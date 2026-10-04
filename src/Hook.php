@@ -47,26 +47,46 @@ class Hook {
     /* mmdc 版本 */
     private static $mmdc_ver = '';
 
+    /* 是否使用外部 API (Kroki) 生成 SVG */
+    private static $byApi = false;
+
+    /* Kroki API 網址 */
+    private static $apiUrl = '';
+
     /**
      * 掛載點設定 (由 MediaWiki 觸發)
      *
      * @param $parser MediaWiki 的語法處理器
      */
     public static function init(&$parser) {
+        global $wgQuickMMDByApi, $wgQuickMMDApiUrl;
+
         // 取得版本字串
         self::$version = ExtensionRegistry::getInstance()->getAllThings()['QuickMMD']['version'];
 
         // 取得 php 指令路徑
         self::$php_cmd = FileSystemUtils::findExecutable('php');
 
-        // 取得 mmdc 指令路徑
-        self::$mmdc_cmd = FileSystemUtils::findExecutable('mmdc');
+        // 是否使用外部 API
+        self::$byApi = !empty($wgQuickMMDByApi);
 
-        // 取 mermaid-cli 版本資訊
-        // (stdout) 11.16.0
-        $cmd = sprintf('%s -V', escapeshellarg(self::$mmdc_cmd));
-        self::pipeExec($cmd, '', $out, $err);
-        self::$mmdc_ver = $out;
+        // Kroki API 網址, 未設定時預設 http://kroki:8000
+        self::$apiUrl = !empty($wgQuickMMDApiUrl) ? $wgQuickMMDApiUrl : 'http://kroki:8000';
+        // 去除尾部斜線
+        self::$apiUrl = rtrim(self::$apiUrl, '/');
+
+        // 取得 mmdc 指令路徑 (僅在非 API 模式時需要)
+        if (!self::$byApi) {
+            if (self::$mmdc_cmd == '') {
+                self::$mmdc_cmd = FileSystemUtils::findExecutable('mmdc');
+            }
+
+            // 取 mermaid-cli 版本資訊
+            // (stdout) 11.16.0
+            $cmd = sprintf('%s -V', escapeshellarg(self::$mmdc_cmd));
+            self::pipeExec($cmd, '', $out, $err);
+            self::$mmdc_ver = $out;
+        }
 
         // 設定函數鉤
         $parser->setHook('quickmmd', [self::class, 'render']);
@@ -279,6 +299,13 @@ class Hook {
     private function genSvg() {
         $begin = microtime(true);
 
+        // 使用外部 API (Kroki) 生成 SVG
+        if (self::$byApi) {
+            $this->genSvgByApi();
+            $this->elapsed = microtime(true) - $begin;
+            return;
+        }
+
         // 執行 php, 產生 dot 語法
         $mmd_tpl = sprintf('%s/../templates/mmd-builder.php', __DIR__);
         $cmd = sprintf(
@@ -341,8 +368,76 @@ class Hook {
     }
 
     /**
+     * 透過 Kroki API 生成 SVG
+     *
+     * POST {apiUrl}/mermaid/svg
+     * body: mermaid 語法 (plain text)
+     * response: SVG 內容
+     */
+    private function genSvgByApi() {
+        $url = self::$apiUrl . '/mermaid/svg';
+
+        // 使用 curl 呼叫 Kroki API
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => $this->mmd_syntax,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_TIMEOUT        => 30,
+            CURLOPT_HTTPHEADER     => [
+                'Content-Type: text/plain',
+                'Accept: image/svg+xml',
+            ],
+        ]);
+
+        $response  = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curl_errno  = curl_errno($ch);
+        $curl_error  = curl_error($ch);
+        curl_close($ch);
+
+        // curl 層錯誤 (DNS 解析失敗、連線被拒絕等)
+        if ($response === false) {
+            $this->errors[] = sprintf('Kroki API connection failed: %s', $curl_error);
+            return;
+        }
+
+        // HTTP 錯誤
+        if ($http_code !== 200) {
+            $this->errors[] = sprintf('Kroki API returned HTTP %d', $http_code);
+            $this->errors[] = $response;
+            return;
+        }
+
+        // 驗證回傳值是 SVG
+        $trimmed = ltrim($response);
+        if (strpos($trimmed, '<svg') === false) {
+            $this->errors[] = 'Kroki API response is not a valid SVG.';
+            $this->errors[] = $response;
+            return;
+        }
+
+        // 寫入 SVG 檔案
+        file_put_contents($this->svg_file, $response);
+
+        // 寫入摘要檔
+        $summary = [
+            'md5'     => $this->md5_incoming,
+            'elapsed' => 0, // 由呼叫端 genSvg() 計算
+        ];
+        FileSystemUtils::saveSummary($this->summary_file, $summary);
+
+        // 寫入除錯檔
+        FileSystemUtils::dumpDebugFile('kroki-out.svg', $response);
+
+        $this->svg_mtime = filemtime($this->svg_file);
+        $this->successful = true;
+    }
+
+    /**
      * 生成系統資訊表, dump-env="true" 的時候使用
-     * 
+     *
      * @return string 系統資訊表的 HTML 原始碼
      */
     private function genHtmlOfEnv()
@@ -385,8 +480,13 @@ class Hook {
             $table_data[] = [ 'label' => 'md5-existed' , 'data' => $this->md5_existed ];
         }
         
-        $table_data[] = [ 'label' => 'mermaid-cli-path'  , 'data' => self::$mmdc_cmd ];
-        $table_data[] = [ 'label' => 'mermaid-cli-ver'   , 'data' => self::$mmdc_ver ];
+        if (self::$byApi) {
+            $table_data[] = [ 'label' => 'svg-engine'      , 'data' => 'Kroki API' ];
+            $table_data[] = [ 'label' => 'kroki-api-url'   , 'data' => self::$apiUrl ];
+        } else {
+            $table_data[] = [ 'label' => 'mermaid-cli-path'  , 'data' => self::$mmdc_cmd ];
+            $table_data[] = [ 'label' => 'mermaid-cli-ver'   , 'data' => self::$mmdc_ver ];
+        }
         $table_data[] = [ 'label' => 'mermaid-syntax-ref', 'data' => $syntax_ref ];
         $table_data[] = [ 'label' => 'quickmmd-ver'      , 'data' => $about ];
 

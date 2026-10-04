@@ -8,6 +8,8 @@
     "md5-incoming":        "目前語法 MD5",
     "mermaid-cli-path":    "mermaid-cli 路徑",
     "mermaid-cli-ver":     "mermaid-cli 版本",
+    "svg-engine":          "SVG 生成引擎",
+    "kroki-api-url":       "Kroki API 網址",
     "mermaid-syntax-ref":  "美人魚 (Mermaid) 語法參考",
     "quickmmd-about":      "關於 QuickMMD",
     "quickmmd-sec":        "秒",

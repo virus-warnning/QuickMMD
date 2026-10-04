@@ -8,6 +8,8 @@
     "md5-incoming":        "MD5 of incoming syntax",
     "mermaid-cli-path":    "mermaid-cli Path",
     "mermaid-cli-ver":     "mermaid-cli Version",
+    "svg-engine":          "SVG Engine",
+    "kroki-api-url":       "Kroki API URL",
     "mermaid-syntax-ref":  "Mermaid syntax Reference",
     "quickmmd-about":      "About QuickMMD",
     "quickmmd-sec":        "second(s)",

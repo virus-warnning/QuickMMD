@@ -50,7 +50,8 @@ class FileSystemUtils {
 
         // 產生沒找到的錯誤訊息
         if ($exec_path === '') {
-            Hook::$sys_errors[] = sprintf('%s not found.', $exec_name);
+            $user = posix_getpwuid(posix_geteuid());
+            Hook::$sys_errors[] = sprintf('%s not found. (user: %s)', $exec_name, $user['name']);
             return '';
         }
 
