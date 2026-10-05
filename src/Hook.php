@@ -7,6 +7,11 @@
  * !!! 開發注意事項 !!!
  * - 存檔 1 次實際上會觸發 3 次 render(), 所以必須把生成資訊存檔才能在顯示階段觀察
  * 
+ * 偶爾會出現這個, 需要觀察
+ * TODO: Deprecated: MediaWiki\HTMLForm\HTMLFormField::__construct: Constructing an HTMLFormField without a 'parent' parameter
+ *       [Called from MediaWiki\HTMLForm\Field\HTMLTextField::__construct in /var/www/html/includes/htmlform/fields/HTMLTextField.php at line 42]
+ *       in /var/www/html/includes/debug/MWDebug.php on line 385
+ * 
  * Refactoring
  * TODO: 消化 __construct 的 TODO 事項
  * 
@@ -230,7 +235,7 @@ class Hook {
         // 前置作業
         // TODO: 切出另一個 function 處理
         $this->md5_incoming = md5(json_encode($props).$mmd_syntax);
-        $prefix = str_replace(array('\\','/',' '), '_', $parser->mTitle); // TODO: 搬去 self::getSafeName()
+        $prefix = str_replace(array('\\','/',' '), '_', $parser->getTitle()->getFullText()); // TODO: 搬去 self::getSafeName()
         $fn = FileSystemUtils::getSafeName(sprintf('%s-%s', $prefix, $gname));
         $this->svg_file = sprintf('%s/images/quickmmd/%s.svg', $IP, $fn);
         $this->svg_uri  = sprintf('%s/images/quickmmd/%s.svg', $wgScriptPath, $fn);
