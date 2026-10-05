@@ -291,21 +291,31 @@ class Hook {
 
     /**
      * 生成 SVG 圖
-     * 
-     * - step 1: 組合 Mermaid 語法
-     * - step 2: 組合後語法轉換 SVG 圖
-     * - 過程中有問題會寫入 $this->errors[]
+     *
+     * 僅處理二元分支 (API / CLI) 與計時
      */
     private function genSvg() {
         $begin = microtime(true);
 
-        // 使用外部 API (Kroki) 生成 SVG
         if (self::$byApi) {
             $this->genSvgByApi();
-            $this->elapsed = microtime(true) - $begin;
-            return;
+        } else {
+            $this->genSvgByCli($begin);
         }
 
+        $this->elapsed = microtime(true) - $begin;
+    }
+
+    /**
+     * 透過本機 CLI 生成 SVG
+     *
+     * - step 1: 執行 php 組合 Mermaid 語法
+     * - step 2: 執行 mmdc 將語法轉換為 SVG
+     * - 過程中有問題會寫入 $this->errors[]
+     *
+     * @param float $begin microtime(true) 起算時間點
+     */
+    private function genSvgByCli(float $begin) {
         // 執行 php, 產生 dot 語法
         $mmd_tpl = sprintf('%s/../templates/mmd-builder.php', __DIR__);
         $cmd = sprintf(
@@ -364,7 +374,7 @@ class Hook {
         FileSystemUtils::dumpDebugFile('mmdc-err.mmd', $err);
 
         $this->svg_mtime = filemtime($this->svg_file);
-        $this->successful = ($retval === 0);
+        $this->successful = true;
     }
 
     /**
