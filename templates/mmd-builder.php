@@ -1,57 +1,60 @@
 <?php
-function shell_arg($rank, $default_value='') {
-  global $argv;
 
-  if (isset($argv[$rank])) {
-    $v = trim($argv[$rank]);
-    if ($v!=='') return $v;
-  }
+function shell_arg( $rank, $default_value = '' ) {
+	global $argv;
 
-  return $default_value;
+	if ( isset( $argv[$rank] ) ) {
+		$v = trim( $argv[$rank] );
+		if ( $v !== '' ) {
+			return $v;
+		}
+	}
+
+	return $default_value;
 }
 
 // get theme name
-$theme = shell_arg(1, 'default');
+$theme = shell_arg( 1, 'default' );
 
 // get mermaid syntax
-$gdata = trim(file_get_contents('php://stdin'));
+$gdata = trim( file_get_contents( 'php://stdin' ) );
 ?>
 ---
 config:
   theme: <?php echo "$theme\n"; ?>
   themeVariables:
-    fontSize: "12px"
-    nodePadding: "6px"
+	fontSize: "12px"
+	nodePadding: "6px"
   htmlLabels": false
   useMaxWidth: false
   flowchart:
-    useMaxWidth: false
+	useMaxWidth: false
   sequence:
-    useMaxWidth: false
+	useMaxWidth: false
   mindmap:
-    useMaxWidth: false
+	useMaxWidth: false
   gantt:
-    useMaxWidth: false
+	useMaxWidth: false
 ---
-<?php if ($gdata===''): ?>
+<?php if ( $gdata === '' ) { ?>
 
 %% 預設 MMD
 flowchart TD
-    A[Can it work?]
-    B[Did you touch it?]
-    C[Does anybody know that?]
-    Z1[It's OK! Don't touch it.]
-    Z2[Oh! You are such a fool.]
-    A --Yes--> Z1
-    A --No--> B
-    B --No--> Z1
-    B --Yes--> C
-    C --No--> Z1
-    C --Yes--> Z2
+	A[Can it work?]
+	B[Did you touch it?]
+	C[Does anybody know that?]
+	Z1[It's OK! Don't touch it.]
+	Z2[Oh! You are such a fool.]
+	A --Yes--> Z1
+	A --No--> B
+	B --No--> Z1
+	B --Yes--> C
+	C --No--> Z1
+	C --Yes--> Z2
 
-<?php else: ?>
+<?php } else { ?>
 
 %% 自定義 MMD
 <?php echo $gdata; ?>
 
-<?php endif; ?>
+<?php }

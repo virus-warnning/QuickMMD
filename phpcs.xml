@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<ruleset name="QuickMMD">
+    <rule ref="MediaWiki"/>
+
+    <file>src/</file>
+    <file>templates/</file>
+
+    <!-- 忽略 vendor 和 debug 目錄 -->
+    <exclude-pattern>vendor/*</exclude-pattern>
+    <exclude-pattern>debug/*</exclude-pattern>
+</ruleset>
