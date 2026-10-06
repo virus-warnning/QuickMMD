@@ -3,6 +3,9 @@ namespace MediaWiki\Extension\QuickMMD;
 
 class FileSystemUtils {
 
+	/**
+	 * 
+	 */
 	public static function dumpDebugFile( $file_name, $file_content, $mode = 0 ) {
 		if ( !ExtensionConstants::DUMP_DEBUG_FILES ) {
 			return;

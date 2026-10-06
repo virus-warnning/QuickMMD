@@ -3,3 +3,5 @@ parameters:
   paths:
     - src
     - templates
+  scanFiles:
+    - tests/stubs/MediaWikiStubs.php

@@ -1,5 +1,7 @@
 <?php
-
+/**
+ * 
+ */
 function shell_arg( $rank, $default_value = '' ) {
 	global $argv;
 

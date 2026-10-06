@@ -4,19 +4,16 @@
  *
  * @author Raymond Wu https://github.com/virus-warnning
  *
- * !!! 開發注意事項 !!!
+ * !!! 開發注意事項 !!!, 這個之後要改寫進 Markdown, php 保持乾淨
  * - 存檔 1 次實際上會觸發 3 次 render(), 所以必須把生成資訊存檔才能在顯示階段觀察
- *
- * 偶爾會出現這個, 需要觀察
- * TODO: Deprecated: MediaWiki\HTMLForm\HTMLFormField::__construct: Constructing an HTMLFormField without a 'parent' parameter
- *       [Called from MediaWiki\HTMLForm\Field\HTMLTextField::__construct in /var/www/html/includes/htmlform/fields/HTMLTextField.php at line 42]
- *       in /var/www/html/includes/debug/MWDebug.php on line 385
  *
  * Refactoring
  * TODO: 消化 __construct 的 TODO 事項
  *
  * ---------------------------------
  *
+ * 這些要改寫進 GitHub Issue
+ * 
  * Refactoring
  * TODO: $sys_errors 會被 Hook 讀, 被 FileSystemUtils 寫, 需要改善可讀性
  * TODO: 導入 composer.json
@@ -37,31 +34,33 @@ use ExtensionRegistry;
 
 class Hook {
 
-	/* 系統環境錯誤訊息 */
+	/** 系統環境錯誤訊息 */
 	public static $sys_errors = [];
 
-	/* 版本字串 */
+	/** 版本字串 */
 	private static $version = '0.0.0';
 
-	/* php 指令路徑 */
+	/** php 指令路徑 */
 	private static $php_cmd = '';
 
-	/* mmdc 指令路徑 */
+	/** mmdc 指令路徑 */
 	private static $mmdc_cmd = '';
 
-	/* mmdc 版本 */
+	/** mmdc 版本 */
 	private static $mmdc_ver = '';
 
-	/* 是否使用外部 API (Kroki) 生成 SVG */
+	/** 是否使用外部 API (Kroki) 生成 SVG */
 	private static $byApi = false;
 
-	/* Kroki API 網址 */
+	/** Kroki API 網址 */
 	private static $apiUrl = '';
 
 	/**
 	 * 掛載點設定 (由 MediaWiki 觸發)
 	 *
-	 * @param &$parser MediaWiki 的語法處理器
+	 * @param sucks &$parser MediaWiki 的語法處理器
+	 *
+	 * @return TODO
 	 */
 	public static function init( &$parser ) {
 		global $wgQuickMMDByApi, $wgQuickMMDApiUrl;
@@ -102,10 +101,12 @@ class Hook {
 	/**
 	 * 製圖 (由 MediaWiki 觸發)
 	 *
-	 * @param $mmd_syntax MediaWiki 寫的語法內文
-	 * @param $props 標籤內的屬性
+	 * @param sucks $mmd_syntax MediaWiki 寫的語法內文
+	 * @param sucks $props 標籤內的屬性
 	 * @param null $parser MediaWiki 的語法分析器
-	 * @param $frame 不知道是啥小
+	 * @param sucks $frame 不知道是啥小
+	 *
+	 * @return TODO
 	 */
 	public static function render( $mmd_syntax, $props = [], $parser = null, $frame = false ) {
 		// 用來檢查存檔一次會觸發幾次 render(), 平常可以關掉
@@ -122,6 +123,11 @@ class Hook {
 		];
 	}
 
+	/**
+	 * TODO
+	 *
+	 * @return TODO
+	 */
 	private static function getCleanStack() {
 		$stack = debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS );
 		$cleanStack = [];
@@ -182,7 +188,7 @@ class Hook {
 		// 轉檔紀錄
 		private string $summary_file = '',
 	) {
-		global $IP, $wgScriptPath;
+		global $wgScriptPath;
 
 		// 暫時測試用
 		// $this->warnings = [
@@ -237,11 +243,12 @@ class Hook {
 		// 前置作業
 		// TODO: 切出另一個 function 處理
 		$this->md5_incoming = md5( json_encode( $props ) . $mmd_syntax );
-		$prefix = str_replace( [ '\\', '/', ' ' ], '_', $parser->getTitle()->getFullText() ); // TODO: 搬去 self::getSafeName()
+		// TODO: 搬去 self::getSafeName()
+		$prefix = str_replace( [ '\\', '/', ' ' ], '_', $parser->getTitle()->getFullText() );
 		$fn = FileSystemUtils::getSafeName( sprintf( '%s-%s', $prefix, $gname ) );
-		$this->svg_file = sprintf( '%s/images/quickmmd/%s.svg', $IP, $fn );
+		$this->svg_file = sprintf( '%s/images/quickmmd/%s.svg', MW_INSTALL_PATH, $fn );
 		$this->svg_uri  = sprintf( '%s/images/quickmmd/%s.svg', $wgScriptPath, $fn );
-		$this->summary_file = sprintf( '%s/images/quickmmd/%s.json', $IP, $fn );
+		$this->summary_file = sprintf( '%s/images/quickmmd/%s.json', MW_INSTALL_PATH, $fn );
 
 		// 快取作業
 		$begin = microtime( true );
@@ -264,6 +271,8 @@ class Hook {
 
 	/**
 	 * 輸出 HTML
+	 *
+	 * @return TODO
 	 */
 	public function genFullHtml() {
 		// 顯示主要內容
@@ -327,9 +336,12 @@ class Hook {
 		$mmd_tpl = sprintf( '%s/../templates/mmd-builder.php', __DIR__ );
 		$cmd = sprintf(
 			'%s %s %s',
-			escapeshellarg( self::$php_cmd ), // php
-			escapeshellarg( $mmd_tpl ), // ./QuickMMD.template.php
-			$this->theme                    // theme
+			// php
+			escapeshellarg( self::$php_cmd ),
+			// ./QuickMMD.template.php
+			escapeshellarg( $mmd_tpl ),
+			// theme
+			$this->theme
 		);
 		$retval = self::pipeExec( $cmd, $this->mmd_syntax, $done_syntax, $err, 'utf-8' );
 		if ( $retval !== 0 ) {
@@ -441,7 +453,8 @@ class Hook {
 		// 寫入摘要檔
 		$summary = [
 			'md5'     => $this->md5_incoming,
-			'elapsed' => 0, // 由呼叫端 genSvg() 計算
+			// 由呼叫端 genSvg() 計算
+			'elapsed' => 0,
 		];
 		FileSystemUtils::saveSummary( $this->summary_file, $summary );
 
@@ -629,14 +642,18 @@ class Hook {
 
 		// pipe all streams
 		$desc = [
-			[ 'pipe', 'r' ], // stdin
-			[ 'pipe', 'w' ], // stdout
-			[ 'pipe', 'w' ]  // stderr
+			// stdin
+			[ 'pipe', 'r' ],
+			// stdout
+			[ 'pipe', 'w' ],
+			// stderr
+			[ 'pipe', 'w' ]
 		];
 
 		// run the command
 		if ( PHP_OS === 'WINNT' ) {
-			$cmd = sprintf( '"%s"', $cmd ); // hack for windows
+			// hack for windows
+			$cmd = sprintf( '"%s"', $cmd );
 		}
 		$proc = proc_open( $cmd, $desc, $pipes );
 		if ( is_resource( $proc ) ) {

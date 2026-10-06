@@ -10,15 +10,24 @@ class FieldResult {
 	) {
 	}
 
-	public static function CreateOkay( $field_name, $value ) {
+	/**
+	 * 
+	 */
+	public static function createOkay( $field_name, $value ) {
 		return new self( $field_name, $value, '', '' );
 	}
 
-	public static function CreateWarning( $field_name, $value, $warning_message ) {
+	/**
+	 * 
+	 */
+	public static function createWarning( $field_name, $value, $warning_message ) {
 		return new self( $field_name, $value, '', $warning_message );
 	}
 
-	public static function CreateError( $field_name, $error_message ) {
+	/**
+	 * 
+	 */
+	public static function createError( $field_name, $error_message ) {
 		return new self( $field_name, null, $error_message, '' );
 	}
 }

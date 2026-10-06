@@ -4,13 +4,13 @@ namespace MediaWiki\Extension\QuickMMD;
 class ExtensionConstants {
 
 	/* 是否啟用除錯過程檔 */
-	const DUMP_DEBUG_FILES = true;
+	public const DUMP_DEBUG_FILES = true;
 
 	/* 是否啟用 SVG 快取 */
-	const ENABLE_SVG_CACHE = true;
+	public const ENABLE_SVG_CACHE = true;
 
 	/* 插入 SVG 的 <img> 元素樣式 */
-	const IMG_STYLES = [
+	public const IMG_STYLES = [
 		'width: min-content;',
 		'height: auto;',
 		'border: 1px solid #aaa;',
@@ -19,7 +19,7 @@ class ExtensionConstants {
 	];
 
 	/* 警示訊息與錯誤訊息的 <pre> 元素樣式 */
-	const LOGGING_STYLES = [
+	public const LOGGING_STYLES = [
 		'display: inline-block;',
 		'margin: 0;',
 		'overflow: scroll;',
