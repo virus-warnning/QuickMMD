@@ -27,6 +27,7 @@ $theme = shell_arg( 1, 'default' );
 $gdata = trim( file_get_contents( 'php://stdin' ) );
 ?>
 ---
+<?php // phpcs:disable ?>
 config:
   theme: <?php echo "$theme\n"; ?>
   themeVariables:
@@ -42,6 +43,7 @@ config:
     useMaxWidth: false
   gantt:
     useMaxWidth: false
+<?php // phpcs:enable ?>
 ---
 <?php if ( $gdata === '' ) { ?>
 
