@@ -506,7 +506,7 @@ class Hook {
 		} else {
 			$table_data[] = [ 'label' => 'cache-detected', 'data' => 'No' ];
 			$table_data[] = [ 'label' => 'md5-incoming', 'data' => $this->md5_incoming ];
-			$table_data[] = [ 'label' => 'md5-existed', 'data' => $this->md5_existed ];
+			$table_data[] = [ 'label' => 'md5-cached', 'data' => $this->md5_existed ];
 		}
 
 		if ( self::$byApi ) {
