@@ -14,17 +14,19 @@ namespace MediaWiki\Extension\QuickMMD;
 
 class Validator {
 
-	/* Mermaid 語法內容上限 (1M) */
-	const MAX_SYNTAX_SIZE = 1048576;
+	// Mermaid 語法內容上限 (1M)
+	public const MAX_SYNTAX_SIZE = 1048576;
 
-	/* 命名最短字數 */
-	const NAME_LBOUND = 2;
+	// 命名最短字數
+	public const NAME_LBOUND = 2;
 
-	/* 命名最長字數 */
-	const NAME_UBOUND = 25;
+	// 命名最長字數
+	public const NAME_UBOUND = 25;
 
 	/**
 	 * 各欄位資料限制定義
+	 *
+	 * @return TODO
 	 */
 	public static function getDescriptor() {
 		$boolSpec = [
@@ -76,6 +78,10 @@ class Validator {
 
 	/**
 	 * 生成套版後的錯誤/警示訊息
+	 *
+	 * @param string $fieldName TODO
+	 * @param string $fieldSpec TODO
+	 * @return TODO
 	 */
 	public static function buildValidationMessage( $fieldName, $fieldSpec ) {
 		$langKey = sprintf( 'validation-%s', $fieldName );
@@ -100,6 +106,8 @@ class Validator {
 
 	/**
 	 * 檢查所有欄位的資料
+	 *
+	 * @return TODO
 	 */
 	public static function validate( array $rawArgs ) {
 		$descriptor = self::getDescriptor();

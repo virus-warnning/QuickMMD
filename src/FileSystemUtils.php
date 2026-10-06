@@ -4,7 +4,11 @@ namespace MediaWiki\Extension\QuickMMD;
 class FileSystemUtils {
 
 	/**
-	 * 
+	 * TODO
+	 *
+	 * @param string $file_name TODO
+	 * @param string $file_content TODO
+	 * @param int $mode TODO
 	 */
 	public static function dumpDebugFile( $file_name, $file_content, $mode = 0 ) {
 		if ( !ExtensionConstants::DUMP_DEBUG_FILES ) {
@@ -30,7 +34,7 @@ class FileSystemUtils {
 	 * - Windows 以外的系統用 which 找
 	 * - Windows 待研究
 	 *
-	 * @param $exec_name 程式名稱
+	 * @param string $exec_name 程式名稱
 	 * @return 程式完整路徑
 	 */
 	public static function findExecutable( $exec_name ) {
@@ -72,7 +76,8 @@ class FileSystemUtils {
 	/**
 	 * 取得人性化的檔案大小
 	 *
-	 * @param $size 位元組數
+	 * @param string $svgfile TODO
+	 * @return TODO
 	 */
 	public static function getFriendlySize( $svgfile ) {
 		static $unit_ch = [ 'B', 'KB', 'MB' ];
@@ -94,7 +99,8 @@ class FileSystemUtils {
 	/**
 	 * 檔名迴避 Windows 不接受的字元
 	 *
-	 * @param $unsafename
+	 * @param string $unsafename TODO
+	 * @return TODO
 	 */
 	public static function getSafeName( $unsafename ) {
 		$safename = '';
@@ -116,6 +122,9 @@ class FileSystemUtils {
 
 	/**
 	 * 載入 SVG 轉檔摘要資訊, 以及容錯處理
+	 *
+	 * @param string $file_path
+	 * @return TODO
 	 */
 	public static function loadSummary( $file_path ) {
 		if ( is_file( $file_path ) ) {
@@ -133,6 +142,9 @@ class FileSystemUtils {
 	 * 儲存 SVG 轉檔摘要資訊
 	 * - md5     輸入值的 MD5 摘要
 	 * - elapsed 轉換 SVG 的消耗時間
+	 *
+	 * @param string $file_path TODO
+	 * @param string $summary TODO
 	 */
 	public static function saveSummary( $file_path, $summary ) {
 		$json_options = JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;

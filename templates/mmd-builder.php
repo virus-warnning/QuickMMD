@@ -1,6 +1,11 @@
 <?php
+
 /**
- * 
+ * TODO
+ *
+ * @param string $rank TODO
+ * @param string $default_value TODO
+ * @return TODO
  */
 function shell_arg( $rank, $default_value = '' ) {
 	global $argv;

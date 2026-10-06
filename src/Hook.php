@@ -13,7 +13,7 @@
  * ---------------------------------
  *
  * 這些要改寫進 GitHub Issue
- * 
+ *
  * Refactoring
  * TODO: $sys_errors 會被 Hook 讀, 被 FileSystemUtils 寫, 需要改善可讀性
  * TODO: 導入 composer.json
@@ -34,25 +34,25 @@ use ExtensionRegistry;
 
 class Hook {
 
-	/** 系統環境錯誤訊息 */
+	/** @var array 系統環境錯誤訊息 */
 	public static $sys_errors = [];
 
-	/** 版本字串 */
+	/** @var string 版本字串 */
 	private static $version = '0.0.0';
 
-	/** php 指令路徑 */
+	/** @var string php 指令路徑 */
 	private static $php_cmd = '';
 
-	/** mmdc 指令路徑 */
+	/** @var string mmdc 指令路徑 */
 	private static $mmdc_cmd = '';
 
-	/** mmdc 版本 */
+	/** @var string mmdc 版本 */
 	private static $mmdc_ver = '';
 
-	/** 是否使用外部 API (Kroki) 生成 SVG */
+	/** @var bool 是否使用外部 API (Kroki) 生成 SVG */
 	private static $byApi = false;
 
-	/** Kroki API 網址 */
+	/** @var string Kroki API 網址 */
 	private static $apiUrl = '';
 
 	/**
