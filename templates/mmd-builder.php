@@ -30,18 +30,18 @@ $gdata = trim( file_get_contents( 'php://stdin' ) );
 config:
   theme: <?php echo "$theme\n"; ?>
   themeVariables:
-	fontSize: "12px"
-	nodePadding: "6px"
-  htmlLabels": false
+    fontSize: "12px"
+    nodePadding: "6px"
+  htmlLabels: false
   useMaxWidth: false
   flowchart:
-	useMaxWidth: false
+    useMaxWidth: false
   sequence:
-	useMaxWidth: false
+    useMaxWidth: false
   mindmap:
-	useMaxWidth: false
+    useMaxWidth: false
   gantt:
-	useMaxWidth: false
+    useMaxWidth: false
 ---
 <?php if ( $gdata === '' ) { ?>
 
