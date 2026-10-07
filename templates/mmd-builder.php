@@ -1,27 +1,12 @@
 <?php
 
-/**
- * TODO
- *
- * @param string $rank TODO
- * @param string $default_value TODO
- * @return TODO
- */
-function shell_arg( $rank, $default_value = '' ) {
-	global $argv;
-
-	if ( isset( $argv[$rank] ) ) {
-		$v = trim( $argv[$rank] );
-		if ( $v !== '' ) {
-			return $v;
-		}
-	}
-
-	return $default_value;
-}
+$shell_arg = static function ( int $rank, string $default = '' ): string {
+	$v = isset( $argv[$rank] ) ? trim( $argv[$rank] ) : '';
+	return $v !== '' ? $v : $default;
+};
 
 // get theme name
-$theme = shell_arg( 1, 'default' );
+$theme = $shell_arg( 1, 'default' );
 
 // get mermaid syntax
 $gdata = trim( file_get_contents( 'php://stdin' ) );

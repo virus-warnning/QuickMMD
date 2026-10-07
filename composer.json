@@ -11,12 +11,12 @@
     ],
     "require-dev": {
         "mediawiki/mediawiki-codesniffer": "^52.0",
-        "phpstan/phpstan": "^2.0"
+        "mediawiki/mediawiki-phan-config": "^0.14"
     },
     "scripts": {
         "lint": "phpcs",
         "beautify": "phpcbf",
-        "stan": "phpstan analyze"
+        "phan": "phan"
     },
     "config": {
         "allow-plugins": {

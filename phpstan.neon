@@ -1,7 +1,0 @@
-parameters:
-  level: 0
-  paths:
-    - src
-    - templates
-  scanFiles:
-    - tests/stubs/MediaWikiStubs.php

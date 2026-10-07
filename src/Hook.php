@@ -424,7 +424,6 @@ class Hook {
 		$http_code = curl_getinfo( $ch, CURLINFO_HTTP_CODE );
 		$curl_errno  = curl_errno( $ch );
 		$curl_error  = curl_error( $ch );
-		curl_close( $ch );
 
 		// curl 層錯誤 (DNS 解析失敗、連線被拒絕等)
 		if ( $response === false ) {

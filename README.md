@@ -1,36 +1,37 @@
-# QuickMMD
+## Requirements
 
-A MediaWiki extension to draw charts with mermaid syntax.
+### Runtime
 
-See: https://www.mediawiki.org/wiki/Extension:QuickMMD
+- PHP 8.1
+- MediaWiki 1.43
+- mmdc or kroki
 
-## Before develop
+### Development
 
-```sh
-composer install
-```
+- PHP 8.1
+- ast (for phan)
+- composer
+- docker
 
-## About axe agent 
-
-There is an agent definition in axe folder.
-
-It works only at the repository root.
-
-```sh
-path-to/QuickMMD$ axe agents list
-```
+## File Structure
 
 ```
-xxx - another agent
-qmmd - for MediaWiki extension QuickMMD development
-```
-
-If cd into subfolder, the agent cannot be found.
-
-```sh
-path-to/QuickMMD/src$ axe agents list
-```
-
-```
-xxx - another agent
+|-- extension.json              # 📋 MediaWiki extension registration
+|-- composer.json               # 📦 Composer dependencies
+|-- phpcs.xml                   # ✅ PHPCS config (MediaWiki standard)
+|-- config-puppeteer.json       # 🤖 Puppeteer config (for mmdc)
+|-- .phan/
+|   |-- config.php              # 🔍 Phan static analysis config
+|-- src/
+|   |-- ExtensionConstants.php  # 🏷️ Extension name, version constants
+|   |-- Hook.php                # 🪝 MediaWiki hook registration & main logic
+|   |-- FieldResult.php         # 📝 Form field result wrapper
+|   |-- FileSystemUtils.php     # 📁 File system utilities
+|   |-- Validator.php           # ✔️ MMD syntax validation
+|-- templates/
+|   |-- mmd-builder.php         # 🏗️ mmdc execution template (stdin -> SVG)
+|-- i18n/
+|   |-- en.json                 # 🇬🇧 English translations
+|   |-- zh-hant.json            # 🇹🇼 Traditional Chinese translations
+|-- debug/                      # 🐛 Debug files (not in VCS)
 ```
