@@ -69,27 +69,28 @@ class Hook {
 		self::$version = ExtensionRegistry::getInstance()->getAllThings()['QuickMMD']['version'];
 
 		// 取得 php 指令路徑
-		self::$php_cmd = FileSystemUtils::findExecutable( 'php' );
+		self::$php_cmd = Command::findExecutable( 'php' );
 
 		// 是否使用外部 API
 		self::$byApi = !empty( $wgQuickMMDByApi );
 
 		// Kroki API 網址, 未設定時預設 http://kroki:8000
 		self::$apiUrl = !empty( $wgQuickMMDApiUrl ) ? $wgQuickMMDApiUrl : 'http://kroki:8000';
+
 		// 去除尾部斜線
 		self::$apiUrl = rtrim( self::$apiUrl, '/' );
 
 		// 取得 mmdc 指令路徑 (僅在非 API 模式時需要)
 		if ( !self::$byApi ) {
 			if ( self::$mmdc_cmd == '' ) {
-				self::$mmdc_cmd = FileSystemUtils::findExecutable( 'mmdc' );
+				self::$mmdc_cmd = Command::findExecutable( 'mmdc' );
 			}
 
 			// 取 mermaid-cli 版本資訊
-			// (stdout) 11.16.0
-			$cmd = sprintf( '%s -V', escapeshellarg( self::$mmdc_cmd ) );
-			self::pipeExec( $cmd, '', $out, $err );
-			self::$mmdc_ver = $out;
+			$result = Command::execute( self::$mmdc_cmd, '-V' );
+			if ( $result->getExitCode() === 0 ) {
+				 self::$mmdc_ver = $result->getStdout();
+			}
 		}
 
 		// 設定函數鉤
@@ -333,22 +334,20 @@ class Hook {
 	 */
 	private function genSvgByCli( float $begin ) {
 		// 執行 php, 產生 dot 語法
-		$mmd_tpl = sprintf( '%s/../templates/mmd-builder.php', __DIR__ );
-		$cmd = sprintf(
-			'%s %s %s',
-			// php
-			escapeshellarg( self::$php_cmd ),
-			// ./QuickMMD.template.php
-			escapeshellarg( $mmd_tpl ),
-			// theme
+		$arguments = [
+			self::$php_cmd,
+			sprintf( '%s/../templates/mmd-builder.php', __DIR__ ),
 			$this->theme
-		);
-		$retval = self::pipeExec( $cmd, $this->mmd_syntax, $done_syntax, $err, 'utf-8' );
+		];
+		$retval = Command::pipeExec( $arguments, $this->mmd_syntax, $done_syntax, $err );
 		if ( $retval !== 0 ) {
 			$this->errors[] = 'Cannot compose mermaid syntax.';
 			$this->errors[] = $err;
 			return;
 		}
+
+		// 寫入原始語法除錯檔
+		FileSystemUtils::dumpDebugFile( 'source.mmd', $this->mmd_syntax );
 
 		// 寫入語法合併除錯檔
 		FileSystemUtils::dumpDebugFile( 'merged.mmd', $done_syntax );
@@ -357,14 +356,17 @@ class Hook {
 		$pfile = sprintf( '%s/../config-puppeteer.json', __DIR__ );
 
 		// 執行 mmdc, 產生 svg 圖檔
-		$cmd = sprintf( '%s -q -i - -p %s -o %s',
-			escapeshellarg( self::$mmdc_cmd ),
-			escapeshellarg( $pfile ),
-			escapeshellarg( $this->svg_file )
-		);
-		$retval = self::pipeExec( $cmd, $done_syntax, $out, $err, 'utf-8' );
+		$arguments = [
+			self::$mmdc_cmd,
+			'-q',
+			'-i', '-',
+			'-p', $pfile,
+			'-o', $this->svg_file
+		];
+		$retval = Command::pipeExec( $arguments, $done_syntax, $out, $err );
+
 		if ( $retval !== 0 ) {
-			// 先把 stdout 的 call stack 過濾掉, 完整 stderr 長這樣
+			// 語法錯誤時, 過濾出錯誤的部分, 非語法錯誤就完整顯示
 			//
 			// Error: Parse error on line 4:
 			// ...chart  A1 -- B231
@@ -374,9 +376,12 @@ class Hook {
 			//     at #evaluate (file:///usr/lib/node_modules/@mermaid-js/ ...
 			//     at async ExecutionContext.evaluate (file:///usr/lib/ ...
 			$stack_pos = strpos( $err, 'Parser.parseError (https://' );
-			$key_message = trim( substr( $err, 0, $stack_pos ) );
+			$key_message = $stack_pos === false ? $err : trim( substr( $err, 0, $stack_pos ) );
+
 			$this->errors[] = sprintf( 'Cannot convert SVG by mmdc. (retval=%d)', $retval );
-			$this->errors[] = sprintf( 'Shell command: %s', $cmd );
+			// TODO: 需要改為新作法
+			// $this->errors[] = sprintf( 'Shell command: %s', $cmd );
+			$this->errors[] = sprintf( 'Shell command: %s', implode( ' ', $arguments ) );
 			$this->errors[] = $key_message;
 			return;
 		}
@@ -598,93 +603,6 @@ class Hook {
 			implode( ' ', ExtensionConstants::LOGGING_STYLES ),
 			htmlspecialchars( implode( "\n", $logs ) )
 		);
-	}
-
-	/**
-	 * shell 執行程式
-	 *
-	 * @param string $cmd 執行的 shell 指令
-	 * @param string $stdin 輸入給指令的內容
-	 * @param string &$stdout 指令標準輸出內容
-	 * @param string &$stderr 指令標準錯誤內容
-	 * @param string $encoding 指令標準輸出/標準錯誤的文字編碼, 預設自動偵測
-	 * @return int 回傳錯誤碼, 0 表示正常結束
-	 */
-	private static function pipeExec( $cmd, $stdin = '', &$stdout = '', &$stderr = '', $encoding = 'sys' ) {
-		static $sys_encoding = '';
-
-		if ( $encoding === 'sys' ) {
-			// detect system encoding once
-			if ( $sys_encoding === '' ) {
-				if ( PHP_OS === 'WINNT' ) {
-					// for Windows
-					$lastln = exec( 'chcp', $stdout, $retval );
-					if ( $retval === 0 ) {
-						$ok = preg_match( '/: (\d+)$/', $lastln, $matches );
-						if ( $ok === 1 ) {
-							$sys_encoding = sprintf( 'cp%d', (int)$matches[1] );
-						}
-					}
-				} else {
-					// for Linux / OSX / BSD
-					// TODO: ...
-				}
-
-				if ( $sys_encoding === '' ) {
-					$sys_encoding = 'utf-8';
-				}
-			}
-
-			// apply system encoding
-			$encoding = $sys_encoding;
-		}
-
-		// pipe all streams
-		$desc = [
-			// stdin
-			[ 'pipe', 'r' ],
-			// stdout
-			[ 'pipe', 'w' ],
-			// stderr
-			[ 'pipe', 'w' ]
-		];
-
-		// run the command
-		if ( PHP_OS === 'WINNT' ) {
-			// hack for windows
-			$cmd = sprintf( '"%s"', $cmd );
-		}
-		$proc = proc_open( $cmd, $desc, $pipes );
-		if ( is_resource( $proc ) ) {
-			$encoding = strtolower( $encoding );
-
-			// feed stdin
-			if ( $encoding !== 'utf-8' ) {
-				$stdin = iconv( 'utf-8', $encoding, $stdin );
-			}
-			fwrite( $pipes[0], $stdin );
-			fclose( $pipes[0] );
-
-			// read stdout
-			$stdout = stream_get_contents( $pipes[1] );
-			if ( $encoding !== 'utf-8' ) {
-				$stdout = iconv( $encoding, 'utf-8', $stdout );
-			}
-			fclose( $pipes[1] );
-
-			// read stderr
-			$stderr = stream_get_contents( $pipes[2] );
-			if ( $encoding !== 'utf-8' ) {
-				$stderr = iconv( $encoding, 'utf-8', $stderr );
-			}
-			fclose( $pipes[2] );
-
-			$retval = proc_close( $proc );
-		} else {
-			$retval = -1;
-		}
-
-		return $retval;
 	}
 
 }

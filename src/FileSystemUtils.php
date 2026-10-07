@@ -29,51 +29,6 @@ class FileSystemUtils {
 	}
 
 	/**
-	 * 搜尋程式的完整路徑
-	 * - 只會在 init() 時呼叫
-	 * - Windows 以外的系統用 which 找
-	 * - Windows 待研究
-	 *
-	 * @param string $exec_name 程式名稱
-	 * @return 程式完整路徑
-	 */
-	public static function findExecutable( $exec_name ) {
-		if ( PHP_OS !== 'WINNT' ) {
-			// 先嘗試用 which 找看看
-			$exec_path = exec( "which $exec_name" );
-			// 不行再去特定 bin 目錄找
-			if ( $exec_path === '' ) {
-				$search_dirs = [
-					'/usr/bin',
-					'/usr/local/bin'
-				];
-				foreach ( $search_dirs as $dir ) {
-					$p = sprintf( '%s/%s', $dir, $exec_name );
-					if ( file_exists( $p ) ) {
-						$exec_path = $p;
-						break;
-					}
-				}
-			}
-		}
-
-		// 產生沒找到的錯誤訊息
-		if ( $exec_path === '' ) {
-			$user = posix_getpwuid( posix_geteuid() );
-			Hook::$sys_errors[] = sprintf( '%s not found. (user: %s)', $exec_name, $user['name'] );
-			return '';
-		}
-
-		// 產生有找到但不能執行的錯誤訊息
-		if ( !is_executable( $exec_path ) ) {
-			Hook::$sys_errors[] = sprintf( '%s is not executable.', $exec_name );
-			return '';
-		}
-
-		return $exec_path;
-	}
-
-	/**
 	 * 取得人性化的檔案大小
 	 *
 	 * @param string $svgfile TODO
