@@ -107,58 +107,61 @@ class Validator {
 	/**
 	 * 檢查所有欄位的資料
 	 *
-	 * @return TODO
+	 * @param array $rawArgs Raw input arguments to validate
+	 * @return array{Passed: bool, Fields: FieldResult[]}
 	 */
 	public static function validate( array $rawArgs ) {
 		$descriptor = self::getDescriptor();
 		$passed = true;
 		$fieldResults = [];
 
-		// 1.39+ 安全對照表：手動對應型態到實體類別（徹底擺脫 MediaWiki 內部工廠）
-		$typeToClassMap = [
-			'text'   => \HTMLTextField::class,
-			'select' => \HTMLSelectField::class,
-		];
-
 		foreach ( $descriptor as $name => $fieldSpec ) {
-			$fieldSpec['name'] = $name;
-			$fieldSpec['fieldname'] = $name;
+			$rawValue = $rawArgs[$name] ?? null;
 
-			// 🎯 自製超輕量安全工廠，直接 new 物件
-			$type = $fieldSpec['type'];
-			if ( !isset( $typeToClassMap[$type] ) ) {
-				$result = FieldResult::CreateError( $name, "系統錯誤：不支援的驗證型態 [{$type}]" );
-				$fieldResults[] = $result;
+			// No value provided & has default → use default, skip validation
+			if ( $rawValue === null && isset( $fieldSpec['default'] ) ) {
+				$fieldResults[] = FieldResult::CreateOkay( $name, $fieldSpec['default'] );
+				continue;
+			}
+
+			// No value provided & no default → error
+			if ( $rawValue === null ) {
+				$message = self::buildValidationMessage( $name, $fieldSpec );
+				$fieldResults[] = FieldResult::CreateError( $name, $message );
 				$passed = false;
 				continue;
 			}
 
-			$className = $typeToClassMap[$type];
-			$field = new $className( $fieldSpec, null );
-			$rawValue = $rawArgs[$name] ?? null;
-			$validationResult = $field->validate( $rawValue, $rawArgs );
+			$valid = true;
 
-			if ( $validationResult !== true ) {
-				$langKey = sprintf( 'validation-%s', $name );
+			// Run validation-callback if defined
+			if ( isset( $fieldSpec['validation-callback'] ) ) {
+				$valid = call_user_func( $fieldSpec['validation-callback'], $rawValue );
+			}
+
+			// For select type, ensure value is in allowed options
+			if ( $valid && $fieldSpec['type'] === 'select' ) {
+				$valid = in_array( $rawValue, array_values( $fieldSpec['options'] ), true );
+			}
+
+			if ( $valid !== true ) {
+				$message = self::buildValidationMessage( $name, $fieldSpec );
 				if ( isset( $fieldSpec['default'] ) ) {
-					// 完全沒給值使用預設值的時候, 不跳警告
-					// TODO: 最好可以讓 HTMLSelectField 就處理掉這個問題, 需要單獨拉出來寫測試
-					if ( $rawValue === null ) {
-						continue;
-					}
-					$message = self::buildValidationMessage( $name, $fieldSpec );
-					$result = FieldResult::CreateWarning( $name, $fieldSpec['default'], $message );
-					$fieldResults[] = $result;
+					$fieldResults[] = FieldResult::CreateWarning( $name, $fieldSpec['default'], $message );
 				} else {
-					$message = self::buildValidationMessage( $name, $fieldSpec );
-					$result = FieldResult::CreateError( $name, $message );
-					$fieldResults[] = $result;
+					$fieldResults[] = FieldResult::CreateError( $name, $message );
 					$passed = false;
 				}
-			} else {
-				$result = FieldResult::CreateOkay( $name, $field->filter( $rawValue, $rawArgs ) );
-				$fieldResults[] = $result;
+				continue;
 			}
+
+			// Apply filter-callback if defined (e.g. bool string → bool)
+			$filtered = $rawValue;
+			if ( isset( $fieldSpec['filter-callback'] ) ) {
+				$filtered = call_user_func( $fieldSpec['filter-callback'], $rawValue );
+			}
+
+			$fieldResults[] = FieldResult::CreateOkay( $name, $filtered );
 		}
 
 		return [
