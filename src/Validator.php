@@ -134,6 +134,7 @@ class Validator {
 			}
 
 			$className = $typeToClassMap[$type];
+			$fieldSpec['parent'] = null;
 			$field = new $className( $fieldSpec );
 			$rawValue = $rawArgs[$name] ?? null;
 			$validationResult = $field->validate( $rawValue, $rawArgs );
