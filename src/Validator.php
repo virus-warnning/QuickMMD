@@ -120,7 +120,11 @@ class Validator {
 
 			// No value provided & has default → use default, skip validation
 			if ( $rawValue === null && isset( $fieldSpec['default'] ) ) {
-				$fieldResults[] = FieldResult::CreateOkay( $name, $fieldSpec['default'] );
+				$defaultValue = $fieldSpec['default'];
+				if ( isset( $fieldSpec['filter-callback'] ) ) {
+					$defaultValue = call_user_func( $fieldSpec['filter-callback'], $defaultValue );
+				}
+				$fieldResults[] = FieldResult::CreateOkay( $name, $defaultValue );
 				continue;
 			}
 
@@ -147,7 +151,11 @@ class Validator {
 			if ( $valid !== true ) {
 				$message = self::buildValidationMessage( $name, $fieldSpec );
 				if ( isset( $fieldSpec['default'] ) ) {
-					$fieldResults[] = FieldResult::CreateWarning( $name, $fieldSpec['default'], $message );
+					$defaultValue = $fieldSpec['default'];
+					if ( isset( $fieldSpec['filter-callback'] ) ) {
+						$defaultValue = call_user_func( $fieldSpec['filter-callback'], $defaultValue );
+					}
+					$fieldResults[] = FieldResult::CreateWarning( $name, $defaultValue, $message );
 				} else {
 					$fieldResults[] = FieldResult::CreateError( $name, $message );
 					$passed = false;

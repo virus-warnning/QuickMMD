@@ -16,7 +16,7 @@
     "scripts": {
         "lint": "phpcs",
         "beautify": "phpcbf",
-        "phan": "phan"
+        "phan": "phan -d . --long-progress-bar"
     },
     "config": {
         "allow-plugins": {

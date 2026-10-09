@@ -18,7 +18,4 @@ return [
 
 	// Target PHP version
 	'target_php_version' => '8.1',
-
-	// Minimum supported PHP version (for version-specific checks)
-	'php_version' => '8.1',
 ];
